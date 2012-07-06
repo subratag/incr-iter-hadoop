@@ -1,0 +1,11 @@
+#summary One-sentence summary of this page.
+
+= MapTask =
+
+*Add private method `runIterativeMapper`*
+
+parse state data file and static data file
+
+= IterativeMapper =
+
+*Add new interface `IterativeMapper`*
