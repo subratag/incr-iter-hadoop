@@ -9,3 +9,5 @@ parse state data file and static data file
 = IterativeMapper =
 
 *Add new interface `IterativeMapper`*
+
+= IncrIterHadoopTaskScheduler =
