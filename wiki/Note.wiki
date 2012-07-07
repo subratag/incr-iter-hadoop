@@ -11,3 +11,17 @@ parse state data file and static data file
 *Add new interface `IterativeMapper`*
 
 = IncrIterHadoopTaskScheduler =
+
+= job conf functions =
+
+*`job.setMaintainState()`*
+
+the reduce result (updated state) will be reused by the local map tasks, but we should keep the same number of map tasks and reduce tasks. So that there is a one-to-one mapping.
+
+*`job.setReferenceData("path")`*
+
+The reference data is the data that will be used during the computation process, the data will be loaded to each worker before the job starts.
+
+*`job.setReferenceData("REDUCE_RESULT")`*
+
+The reduce result is the updated reference data, which will be used in the next iteration. so after you set this, the system can load the data before iteration starts.
