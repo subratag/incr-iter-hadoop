@@ -32,18 +32,41 @@ The reduce result is the updated reference data, which will be used in the next 
 
 Here we have several kinds of key-value pairs:
 
-* Static key and value <SK,SV>, which represents a static data record
+* Static key and value <SK,SV>
 
-* Dynamic key and value <DK,DV>, which represents a dynamic data record
+represents a static data record
 
-* Intermediate key and value <IK,IV>, which is the map output key-value pairs or the reduce input key-value pairs
+* Dynamic key and value <DK,DV>
 
-* Output key and value <OK,OV>, which is the reduce output key-value pairs
+represents a dynamic data record
+
+* Intermediate key and value <IK,IV>
+
+is the map output key-value pairs or the reduce input key-value pairs
+
+* Output key and value <OK,OV>
+
+is the reduce output key-value pairs
 
 Then, our framework API supports the following key-value pairs transformations
 
-* DK=project(SK)
+* SK -> project -> DK
 
+This specifies the relationship between a static data record and a dynamic data record. The system uses this projection to join the related static data record and dynamic data record. There are 3 relationships currently supported in our framework, ONE2ONE, ONE2ALL, ONE2MUL
+
+* SK,SV,DV -> map -> IK,IV
+
+The new map function will automatically join the static data record and dynamic data record, and provide them to user for them to implement the map function
+
+* IK,[IV] -> reduce -> OK,OV
+
+The traditional reduce function, which will reduce a list of values to a result value.
+
+* [OK,OV] -> convert -> DK,DV
+
+A convert function will transform the reduce output key-value pairs to the dynamic data record key-value pair.
+
+Note that, in our system, we currently require IK=OK, which is very common case in iterative applications.
 
 
 ==Incremental Processing==
