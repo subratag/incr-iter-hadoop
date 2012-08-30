@@ -25,3 +25,33 @@ The reference data is the data that will be used during the computation process,
 *`job.setReferenceData("REDUCE_RESULT")`*
 
 The reduce result is the updated reference data, which will be used in the next iteration. so after you set this, the system can load the data before iteration starts.
+
+==Iterative Processing==
+
+===Separating Static Data from Dynamic Data===
+
+Here we have several kinds of key-value pairs:
+
+* Static key and value <SK,SV>, which represents a static data record
+
+* Dynamic key and value <DK,DV>, which represents a dynamic data record
+
+* Intermediate key and value <IK,IV>, which is the map output key-value pairs or the reduce input key-value pairs
+
+* Output key and value <OK,OV>, which is the reduce output key-value pairs
+
+Then, our framework API supports the following key-value pairs transformations
+
+* DK=project(SK)
+
+
+
+==Incremental Processing==
+
+===Preserving Job===
+
+Preserving job is the last job or the additional job when the normal iterative computation has finished. We use this job to record the converged state between mappers and reducers, which will be reused in the incremental jobs.
+
+* change key-value pair processing system to key-value-source tuple processing system.
+
+map output is <IK,IV>
