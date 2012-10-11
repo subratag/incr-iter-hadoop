@@ -1,0 +1,101 @@
+package org.apache.hadoop.mapred;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
+
+public class IterativeTaskCompletionEvent implements Writable {
+
+	Text iterativeAppId = new Text();
+	JobID jobID = new JobID();
+	int iterationNum = 0;
+	int taskid = 0;
+	boolean ismap = true;
+	long processedRecords = 0;
+	long spentMilliseconds = 0;
+	float distance = 0;
+
+	
+	public IterativeTaskCompletionEvent() {};
+	
+	public IterativeTaskCompletionEvent(String iterappid, JobID job, int iterNum, int id, boolean isMap){
+		iterativeAppId = new Text(iterappid);
+		jobID = job;
+		iterationNum = iterNum;
+		taskid = id;
+		ismap = isMap;
+	}
+	
+	public String getIterativeAppID(){
+		return iterativeAppId.toString();
+	}
+	
+	public int getIteration(){
+		return iterationNum;
+	}
+	
+	public int gettaskID(){
+		return taskid;
+	}
+	
+	public boolean getIsMap(){
+		return ismap;
+	}
+	
+	public float getSubDistance(){
+		return distance;
+	}
+	
+	public void setSubDistance(float subdistance){
+		distance = subdistance;
+	}
+	
+	public long getProcessedRecords(){
+		return processedRecords;
+	}
+	
+	public void setProcessedRecords(long records){
+		processedRecords = records;
+	}
+	
+	public void setRunTime(long milliseconds){
+		spentMilliseconds = milliseconds;
+	}
+	
+	public long getRunTime(){
+		return spentMilliseconds;
+	}
+	
+
+	
+	public JobID getJob(){
+		return jobID;
+	}
+	
+	@Override
+	public void readFields(DataInput in) throws IOException {
+		this.iterativeAppId.readFields(in);
+		this.jobID.readFields(in);
+		this.iterationNum = in.readInt();
+		this.taskid = in.readInt();
+		this.ismap = in.readBoolean();
+		this.processedRecords = in.readLong();
+		this.spentMilliseconds = in.readLong();
+		this.distance = in.readFloat();
+	}
+
+	@Override
+	public void write(DataOutput out) throws IOException {
+		this.iterativeAppId.write(out);
+		this.jobID.write(out);
+		out.writeInt(this.iterationNum);
+		out.writeInt(this.taskid);
+		out.writeBoolean(this.ismap);
+		out.writeLong(this.processedRecords);
+		out.writeLong(this.spentMilliseconds);
+		out.writeFloat(this.distance);
+	}
+}
