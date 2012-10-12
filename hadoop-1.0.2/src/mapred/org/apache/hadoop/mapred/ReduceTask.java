@@ -121,6 +121,8 @@ class ReduceTask extends Task {
        });
   }
   
+  public static final boolean IsPreserveMore = false;
+  
   private static final Log LOG = LogFactory.getLog(ReduceTask.class.getName());
   private int numMaps;
   private ReduceCopier reduceCopier;
@@ -784,6 +786,7 @@ class ReduceTask extends Task {
 			  return value;
 		  }
 	  }
+
 	  
 	  /**
 	   * the class for extracting the kv pair from the preserve file based on the given kv from delta file
@@ -801,6 +804,7 @@ class ReduceTask extends Task {
 		  DataInputBuffer valueIn = new DataInputBuffer();
 		  DataInputBuffer skeyIn = new DataInputBuffer();
 		  SOURCEKEY cachedSource = null;
+		  IFile.TrippleWriter<KEY, VALUE, SOURCEKEY> pwriter;
 		  
 		  boolean bNext = false;
 		  
@@ -809,6 +813,7 @@ class ReduceTask extends Task {
 		  KSVTuple record;
 		  
 		  public PreserveFileReader(RawKeyValueSourceIterator in, JobConf job,
+				  IFile.TrippleWriter<KEY, VALUE, SOURCEKEY> preserveWriter,
 				  Class<KEY> keyClass,
                   Class<VALUE> valClass, 
                   Class<SOURCEKEY> skeyClass,
@@ -821,6 +826,7 @@ class ReduceTask extends Task {
 		      this.valDeserializer.open(this.valueIn);
 		      this.skeyDeserializer = serializationFactory.getDeserializer(skeyClass);
 		      this.skeyDeserializer.open(this.skeyIn);
+		      this.pwriter = preserveWriter;
 
 		      //threeLineBuffer = new ThreeLineBuffer(negV);
 		      comparator = com1;
@@ -837,6 +843,9 @@ class ReduceTask extends Task {
 					  bNext = false;
 					  return res;
 				  } else{
+					//for single preserve file
+					  pwriter.append(record.key, record.value, record.source);
+					  
 					  record = null;
 					  bNext = false;
 				  }
@@ -852,13 +861,25 @@ class ReduceTask extends Task {
 					  SOURCEKEY psource = readSource();
 					  VALUE pvalue = readValue();
 					  
-					  LOG.info("reading " + pkey + "\t" + psource + "\t" + pvalue + "\tcached source " + cachedSource);
+					  //LOG.info("reading " + pkey + "\t" + psource + "\t" + pvalue + "\tcached source " + cachedSource);
 					  
 					  int comres = comparator.compare(pkey, key);
 					  
 					  //LOG.info("comparing preserve key " + pkey + " with delta key " + key);
 					  
+					  //for single preserve file
 					  if(comres < 0){
+						  pwriter.append(pkey, pvalue, psource);
+						  continue;
+					  }else{
+						  record = new KSVTuple(pkey, psource, pvalue);
+						  break;
+					  }
+					  
+					  /*
+					  //for multiple preserve file
+					  if(comres < 0){
+						  
 						  continue;
 					  }else if(comres > 0){
 						  record = new KSVTuple(pkey, psource, pvalue);
@@ -866,6 +887,7 @@ class ReduceTask extends Task {
 					  }else{
 						  //avoid the redundant k,sk,v, and skip the ones except the FIRST one, the first one is the latest
 						  //LOG.info("reading " + pkey + "\t" + psource + "\t" + pvalue + "\tcached source " + cachedSource);
+
 						  if(psource.equals(cachedSource)){
 							  continue;
 						  }else{
@@ -874,6 +896,7 @@ class ReduceTask extends Task {
 							  break;
 						  }
 					  }
+				  		*/
 				  }
 			  }
 			  
@@ -925,7 +948,6 @@ class ReduceTask extends Task {
 		  }
 	  }
 	  
-
 	    private boolean more = true;
 	    private IFile.TrippleWriter<KEY, VALUE, SOURCEKEY> preserveWriter;
 	    protected RawKeyValueSourceIterator in;
@@ -948,11 +970,7 @@ class ReduceTask extends Task {
 	                           Class<VALUE> valClass, 
 	                           Class<SOURCEKEY> skeyClass, int taskid, VALUE negativeV, 
 	                           Configuration conf, 
-	                           Progressable reporter)
-	      throws IOException {
-	    
-	    	this.deltaReader = new DeltaFileReader(in, (JobConf)conf, keyClass, valClass, skeyClass, negativeV);
-	    	this.preserveReader = new PreserveFileReader(preserveIn, (JobConf)conf, keyClass, valClass, skeyClass, comparator);
+	                           Progressable reporter)throws IOException {
 	      this.negativeV = negativeV;
 	      this.in = in;
 	      this.reporter = reporter;
@@ -960,8 +978,7 @@ class ReduceTask extends Task {
 	      job = (JobConf)conf;
 	      FileSystem localfs = FileSystem.getLocal(job); 
 	      
-	      comparator2 = (RawComparator<SOURCEKEY>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
-
+	      
 	      if(job.isIncrementalStart()){
 	    	  newPreservePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + taskid + "-0");
 	      }else if(job.isIncrementalIterative()){
@@ -970,6 +987,11 @@ class ReduceTask extends Task {
      
 	      preserveWriter = new IFile.TrippleWriter<KEY, VALUE, SOURCEKEY>(job, localfs, newPreservePath, 
 	    		  keyClass, valClass, skeyClass, null, null);
+	      
+	      this.deltaReader = new DeltaFileReader(in, (JobConf)conf, keyClass, valClass, skeyClass, negativeV);
+	      this.preserveReader = new PreserveFileReader(preserveIn, (JobConf)conf, preserveWriter, keyClass, valClass, skeyClass, comparator);
+
+	      comparator2 = (RawComparator<SOURCEKEY>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
 
 	      currDeltaRecord = deltaReader.nextRecord();
 	      if(currDeltaRecord == null) throw new RuntimeException("no entries in delta file!!!");
@@ -987,7 +1009,7 @@ class ReduceTask extends Task {
 	    /// Iterator methods
 
 	    public boolean hasNext() {
-	    	if(currDeltaRecord.key.equals(currPreserveRecord.key)){
+	    	if(currPreserveRecord != null && currDeltaRecord.key.equals(currPreserveRecord.key)){
 	    		return true;
 	    	}else{
 	    		if(nextDeltaRecord != null) return currDeltaRecord.key.equals(nextDeltaRecord.key);
@@ -1311,11 +1333,21 @@ class ReduceTask extends Task {
     	runPreserveReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, comparator, 
                 keyClass, valueClass, job.getStaticKeyClass());
     }else if(job.isIncrementalStart()){
-    	RawKeyValueSourceIterator preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+    	RawKeyValueSourceIterator preserveIter = null;
+    	if(IsPreserveMore){
+    		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
+    	}else{
+    		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+    	}
     	runIncrementalReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
                     keyClass, valueClass, job.getStaticKeyClass());
     }else if(job.isIncrementalIterative()){
-    	RawKeyValueSourceIterator preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+    	RawKeyValueSourceIterator preserveIter = null;
+    	if(IsPreserveMore){
+    		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
+    	}else{
+    		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+    	}
     	runIncrementalIterativeReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
                     keyClass, valueClass, job.getStaticKeyClass());
     }else if(useNewApi) {
@@ -4521,6 +4553,13 @@ class ReduceTask extends Task {
                    comparator, comparator2, reporter, spilledRecordsCounter, null);
     }
     
+    /**
+     * The preserver creation method for multiple preserved files
+     * @param job
+     * @param reporter
+     * @return
+     * @throws IOException
+     */
     @SuppressWarnings("unchecked")
     private RawKeyValueSourceIterator createPreserveKVSIterator2(
         JobConf job, Reporter reporter) throws IOException {
@@ -4620,7 +4659,6 @@ class ReduceTask extends Task {
       Class<K> keyClass = (Class<K>)job.getMapOutputKeyClass();
       Class<V> valueClass = (Class<V>)job.getMapOutputValueClass();
       Class<SK> skeyClass = (Class<SK>)job.getStaticKeyClass();
-      boolean keepInputs = job.getKeepFailedTaskFiles();
       final Path tmpDir = new Path(getTaskID().toString());
       final RawComparator<K> comparator =
         (RawComparator<K>)job.getOutputKeyComparator();
@@ -4644,7 +4682,7 @@ class ReduceTask extends Task {
       			  LOG.info("copy remote preserve file " + remotePreservedStatePath + " to local disk" + localPreservedStatePath + "!!!!!!!!! and file size is " + localfs.getFileStatus(localPreservedStatePath).getLen());
       		  }
   				
-      		  preserveSegments.add(new KVSSegment<K,V,SK>(job, fs, localPreservedStatePath, null, true, -1));
+      		  preserveSegments.add(new KVSSegment<K,V,SK>(job, fs, localPreservedStatePath, null, true, 0));
       		  
       	  }else{
       		  throw new IOException("acturally, there is no preserve data on the path you" +
@@ -4652,44 +4690,18 @@ class ReduceTask extends Task {
       	  }
       }else if(job.isIncrementalIterative()){
     	  //the preserve file stored in last snapshot
-	      int taskid = reduceTask.getTaskID().getTaskID().getId();
-	      Path remotePreservedStatePath = new Path(job.getPreserveStatePath() + "/reducePreserve-" + taskid);
-	      Path localPreservedStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-" + taskid);
-	  			
-      	  if(hdfs.exists(remotePreservedStatePath)){
-      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
-      		  if(!localfs.exists(localPreservedStatePath)){
-      			  hdfs.copyToLocalFile(remotePreservedStatePath, localPreservedStatePath);
-      			  LOG.info("copy remote preserve file " + remotePreservedStatePath + " to local disk" + localPreservedStatePath + "!!!!!!!!!");
-      		  }
-  				
-      		  preserveSegments.add(new KVSSegment<K,V,SK>(job, fs, localPreservedStatePath, null, true, -1));
-      		  
-      	  }else{
-      		  throw new IOException("acturally, there is no preserve data on the path you" +
-  					" have set! Please check the path and check the map task number " + remotePreservedStatePath);
-      	  }
-    	  
-          for(int i=0; i<job.getIterationNum(); i++){
-        	//copy the remote reduce preserve file, which are stored in IncrementalSourceValuesIteration.close()
-	      	  taskid = reduceTask.getTaskID().getTaskID().getId();
-	      	  remotePreservedStatePath = new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + taskid + "-" + i);
-	      	  localPreservedStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + taskid + "-" + i);
-	  			
-	      	  //if(hdfs.exists(remotePreservedStatePath)){
-	      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
-	      		  if(!localfs.exists(localPreservedStatePath)){
-	      			  hdfs.copyToLocalFile(remotePreservedStatePath, localPreservedStatePath);
-	      			  LOG.info("copy remote preserve file " + remotePreservedStatePath + " to local disk" + localPreservedStatePath + "!!!!!!!!!");
-	      		  }
-	  				
-	      		  preserveSegments.add(new KVSSegment<K,V,SK>(job, fs, localPreservedStatePath, null, true, i));
-	      		  
-	      	  //}else{
-	      		  //throw new IOException("acturally, there is no preserve data on the path you" +
-	  					//" have set! Please check the path and check the map task number " + remotePreservedStatePath);
-	      	  //}
-          }
+      	  taskid = reduceTask.getTaskID().getTaskID().getId();
+      	  int iteration = job.getIterationNum();
+      	  Path remotePreservedStatePath = new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + taskid + "-" + (iteration-1));
+      	  Path localPreservedStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + taskid + "-" + (iteration-1));
+  			
+      	  if(!localfs.exists(localPreservedStatePath)){
+  			  hdfs.copyToLocalFile(remotePreservedStatePath, localPreservedStatePath);
+  			  LOG.info("copy remote preserve file " + remotePreservedStatePath + " to local disk" + localPreservedStatePath + "!!!!!!!!!");
+  		  }
+			
+  		  preserveSegments.add(new KVSSegment<K,V,SK>(job, fs, localPreservedStatePath, null, true, 0));
+
       }
      
       LOG.info("Merging " + preserveSegments.size() + " preseved files, ");

@@ -334,7 +334,7 @@ class PreserveMerger {
       boolean hasNext = reader.next();
       long endPos = reader.getPosition();
       
-      LOG.info("adjustpriorityqueue position " + endPos + " segment " + reader.priority + " file " + reader.file);
+      //LOG.info("adjustpriorityqueue position " + endPos + " segment " + reader.priority + " file " + reader.file);
       
       totalBytesProcessed += endPos - startPos;
       mergeProgress.set(totalBytesProcessed * progPerByte);
@@ -362,7 +362,7 @@ class PreserveMerger {
         }
       }
       minSegment = top();
-      LOG.info("top is " + minSegment.priority + " file " + minSegment.file + "\t" + minSegment.getKey() + "\t" + minSegment.getSKey() + "\t" + minSegment.getValue());
+      //LOG.info("top is " + minSegment.priority + " file " + minSegment.file + "\t" + minSegment.getKey() + "\t" + minSegment.getSKey() + "\t" + minSegment.getValue());
       
       key = minSegment.getKey();
       value = minSegment.getValue();
@@ -413,7 +413,7 @@ class PreserveMerger {
     	  
     	  if(res == 0){
     		  //the last appeared k,sk,v is returned for the same k,sk
-    		  LOG.info("comparing priority " + a.getPriority() + "\t" + b.getPriority());
+    		  //LOG.info("comparing priority " + a.getPriority() + "\t" + b.getPriority());
     		  return a.getPriority() > b.getPriority();
     	  }else{
     		  return res < 0;
