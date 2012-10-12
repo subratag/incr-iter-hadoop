@@ -486,7 +486,7 @@ public class JobConf extends Configuration {
 	}
 
 	public int getIterationNum() {
-		return getInt("mapred.iterative.iteration.num", 0);
+		return getInt("mapred.iterative.iteration.num", -1);
 	}
 	
 	// Yanfeng: set the number of iteration rounds

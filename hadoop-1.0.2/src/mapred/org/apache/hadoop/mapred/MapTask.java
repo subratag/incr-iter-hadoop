@@ -1196,7 +1196,7 @@ class MapTask extends Task {
 	localfs = FileSystem.getLocal(job);
 
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
-	RecordReader<DK, DV> dynamicReader = getDynamicReader(job, job.getIterationNum()-1, reporter);					//converged result reader
+	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, job.getIterationNum()-1, reporter);					//converged result reader
 	
     IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
     Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
@@ -1445,6 +1445,41 @@ class MapTask extends Task {
 			
 			return dynamicReader;
 	}
+	
+	private <DK,DV> RecordReader<DK, DV> getFilterDynamicReader(JobConf job, int iteration, TaskReporter reporter) throws IOException{
+		RecordReader<DK, DV> dynamicReader = null;					//converged result reader
+		
+		if(job.getDynamicDataPath() == null) throw new IOException("we need the converged dynamic data " +
+				"to perform incremental computation!!!");
+		
+		//download the remote converged value data
+		Path remoteDynamicPath = new Path(job.getDynamicDataPath() + "/" + getOutputName(getTaskID().getTaskID().getId()));
+		Path localDynamicPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/filter-" + iteration + "." + this.getTaskID().getTaskID().getId());
+
+		//if(hdfs.exists(remoteDynamicPath)){
+			//this may happen when speculative execution enabled
+			if(!localfs.exists(localDynamicPath)){
+				//if(iteration == -1){
+					//if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
+					//hdfs.copyToLocalFile(remoteDynamicPath, localDynamicPath);
+					//LOG.info("copy remote state file " + remoteDynamicPath + " to local disk" + localDynamicPath + "!!!!!!!!!");
+				throw new RuntimeException("no file " + localDynamicPath + " found");
+			}
+			
+			//load state data
+			long statefilelen = localfs.getFileStatus(localDynamicPath).getLen();
+			
+			InputSplit inputSplit = new FileSplit(localDynamicPath, 0, statefilelen, null, true);
+			dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
+		//}else{
+			//throw new IOException("acturally, there is no static data on the path you" +
+			//		" have set! Please check the path and check the map task number " + remoteDynamicPath);
+		//}
+		
+		LOG.info("processing dynamic data file " + localDynamicPath);
+		
+		return dynamicReader;
+}
   /*
 	private <DK,DV> RecordReader<DK, DV> getIncrPrevReader(JobConf job, int iteration, TaskReporter reporter) throws IOException{
 		RecordReader<DK, DV> dynamicReader = null;					//converged result reader
