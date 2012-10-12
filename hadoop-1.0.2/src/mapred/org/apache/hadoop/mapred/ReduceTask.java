@@ -1086,7 +1086,7 @@ class ReduceTask extends Task {
 			    		  }
 			  	    	  
 					      preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
-					      LOG.info("preserve write1: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
+					      //LOG.info("preserve write1: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 				      }else if(cmpres > 0){
 				    	  //process the preserve file entry
 				    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
@@ -1094,7 +1094,7 @@ class ReduceTask extends Task {
 				    	  currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
 				    	  
 				    	  preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
-				    	  LOG.info("preserve write2: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
+				    	  //LOG.info("preserve write2: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 				    	  //LOG.info("process preserve data: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 	
 				      }else{
 				    	  
@@ -1106,7 +1106,7 @@ class ReduceTask extends Task {
 				    	  if(!currDeltaRecord.value.equals(negativeV)){
 				  	    	  preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
 				  	    	  //LOG.info("replace record: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 
-				  	    	LOG.info("preserve write3: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
+				  	    	//LOG.info("preserve write3: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 				    	  }else{
 				  	    	  //LOG.info("skip record: " + returnTuple.key + "\t" + returnTuple.source); 
 				    	  }
@@ -1141,7 +1141,7 @@ class ReduceTask extends Task {
 		  	    	  
 				      preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
 				      //LOG.info("process new delta: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value);
-				      LOG.info("preserve write4: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
+				      //LOG.info("preserve write4: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 	    		}
 	    		
 		    	
