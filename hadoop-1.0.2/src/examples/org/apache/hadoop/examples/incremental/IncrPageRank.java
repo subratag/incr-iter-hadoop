@@ -40,7 +40,7 @@ public class IncrPageRank {
 				Reporter reporter) throws IOException {
 			
 			float rank = dynamicvalue.get();
-			System.out.println("input : " + statickey + " : " + rank);
+			//System.out.println("input : " + statickey + " : " + rank);
 			String linkstring = staticval.toString();
 			
 			//in order to avoid non-inlink node, which will mismatch the static file
@@ -52,7 +52,7 @@ public class IncrPageRank {
 			for(String link : links){
 				if(link.equals("")) continue;
 				output.collect(new LongWritable(Long.parseLong(link)), new FloatWritable(delta));
-				System.out.println("output: " + link + "\t" + delta);
+				//System.out.println("output: " + link + "\t" + delta);
 			}
 		}
 
@@ -75,13 +75,13 @@ public class IncrPageRank {
 				float v = values.next().get();
 				if(v == -1) continue;	//if the value is equal to the one set by removeLable(), we skip it
 				
-				System.out.println("reduce on " + key + " with " + v);
+				//System.out.println("reduce on " + key + " with " + v);
 				
 				rank += v;
 			}
 			
 			output.collect(key, new FloatWritable(rank));
-			System.out.println("output:" + key + "\t" + rank);
+			System.out.println("output\t" + key + "\t" + rank);
 		}
 		
 		@Override

@@ -127,7 +127,7 @@ public class ComPageRank {
 				Reporter reporter) throws IOException {
 			
 			float rank = dynamicvalue.get();
-			System.out.println("input : " + statickey + " : " + rank);
+			//System.out.println("input : " + statickey + " : " + rank);
 			String linkstring = staticval.toString();
 			
 			//in order to avoid non-inlink node, which will mismatch the static file
@@ -139,7 +139,7 @@ public class ComPageRank {
 			for(String link : links){
 				if(link.equals("")) continue;
 				output.collect(new LongWritable(Long.parseLong(link)), new FloatWritable(delta));
-				System.out.println("output: " + link + "\t" + delta);
+				//System.out.println("output: " + link + "\t" + delta);
 			}
 		}
 
@@ -163,13 +163,13 @@ public class ComPageRank {
 				float v = values.next().get();
 				if(v == -1) continue;
 				
-				System.out.println("reduce on " + key + " with " + v);
+				//System.out.println("reduce on " + key + " with " + v);
 				
 				rank += v;
 			}
 			
 			output.collect(key, new FloatWritable(rank));
-			System.out.println("output:" + key + "\t" + rank);
+			System.out.println("output\t" + key + "\t" + rank);
 		}
 		
 		@Override
@@ -369,51 +369,6 @@ public class ComPageRank {
 	    	
 	    	iteration++;
 	    }
-	    
-	    //preserving job
-    	long preservestart = System.currentTimeMillis();
-    	
-	    JobConf job2 = new JobConf(ComPageRank.class);
-	    String jobname = "PageRank Preserve " + iteration;
-	    job2.setJobName(jobname);
-    
-	    if(partitions == 0) partitions = Util.getTTNum(job2);
-	    
-	    //set for iterative process   
-	    job2.setPreserve(true);
-	    job2.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-	    job2.setIterationNum(iteration);					//iteration numbe
-	    job2.setCheckPointInterval(interval);					//checkpoint interval
-	    job2.setStaticDataPath(output + "/substatic");
-	    job2.setStaticInputFormat(SequenceFileInputFormat.class);
-	    job2.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
-    	job2.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
-	    job2.setOutputFormat(SequenceFileOutputFormat.class);
-	    job2.setPreserveStatePath(output + "/preserve");
-	    
-	    FileInputFormat.addInputPath(job2, new Path(output + "/substatic"));
-	    FileOutputFormat.setOutputPath(job2, new Path(output + "/preserve/convergeState"));
-	    
-	    if(max_iterations == Integer.MAX_VALUE){
-	    	job2.setDistanceThreshold(1);
-	    }
-
-	    job2.setStaticKeyClass(LongWritable.class);
-	    job2.setOutputKeyClass(LongWritable.class);
-	    job2.setOutputValueClass(FloatWritable.class);
-	    
-	    job2.setIterativeMapperClass(PageRankMap.class);	
-	    job2.setIterativeReducerClass(PageRankReduce.class);
-	    job2.setProjectorClass(PageRankProjector.class);
-	    
-	    job2.setNumReduceTasks(partitions);			
-
-	    JobClient.runIterativeJob(job2);
-
-    	long preserveend = System.currentTimeMillis();
-    	long preservationtime = (preserveend - preservestart) / 1000;
-    	Util.writeLog("iter.pagerank.log", "iteration preservation takes " + preservationtime + " s");
-	    
 	    
 		return 0;
 	}
