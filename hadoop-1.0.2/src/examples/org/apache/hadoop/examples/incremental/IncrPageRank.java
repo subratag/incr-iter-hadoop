@@ -204,7 +204,7 @@ public class IncrPageRank {
 	    
 	    long itertime = 0;
 	    
-	    while(cont){
+	    while(cont && iteration <=20){
 	    	long iterstart = System.currentTimeMillis();
 	    	
 		    JobConf job = new JobConf(IncrPageRank.class);

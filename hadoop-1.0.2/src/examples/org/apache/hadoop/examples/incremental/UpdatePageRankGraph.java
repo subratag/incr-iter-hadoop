@@ -102,16 +102,15 @@ public class UpdatePageRankGraph {
 					writer.append(key, new Text(outputv), new Text("-"));
 					System.out.println(key + "\t" + outputv + "\t-");
 					
-					/*
 					int randend = rand.nextInt(Integer.MAX_VALUE);
 					while(randend == key.get()){
 						randend = rand.nextInt(Integer.MAX_VALUE);
 					}
-					*/
 					
 					//write to the new structure file
-					//outputv += randend;
-					outputv += "27";
+					outputv += randend;
+					
+					//outputv += "27";
 					output.collect(key, new Text(outputv));
 					
 					//write to the delta file
