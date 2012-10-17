@@ -129,7 +129,6 @@ class ReduceTask extends Task {
 
   private CompressionCodec codec;
 
-
   { 
     getProgress().setStatus("reduce"); 
     setPhase(TaskStatus.Phase.SHUFFLE);        // phase to start with 
@@ -1624,12 +1623,14 @@ class ReduceTask extends Task {
 			throw new RuntimeException("no key " + key + " in last result can be found!!! or new key (not considered yet) !!!");
 		}
 
+		latestValue = WritableUtils.clone(resultQueue.getValue(), conf);
+		
 		/*
 		//for multiple preserve file
 		//to check whether there are multiple keys from multiple files that can match to the new collected key,
 		//then we will pick the last one
 		int largestPri = resultQueue.getPriority();
-		latestValue = WritableUtils.clone(resultQueue.getValue(), conf);
+		
 		
 		//LOG.info("key " + lastResultKey + " result pri " + largestPri + " value " + resultQueue.getValue() + "\t" + latestValue);
 

@@ -131,11 +131,11 @@ public class IncrPageRank {
 	
 	private static void printUsage() {
 		System.out.println("incrpagerank <UpdateStatic> <DeltaStatic> <ConvergedValuePath> <PreservePath> <outDir> " +
-				"<partitions> <filterthreshold>");
+				"<partitions> <filterthreshold> <totaliter>");
 	}
 
 	public static int main(String[] args) throws Exception {
-		if (args.length < 7) {
+		if (args.length < 8) {
 			printUsage();
 			return -1;
 		}
@@ -147,6 +147,7 @@ public class IncrPageRank {
 	    String output = args[4];
 	    int partitions = Integer.parseInt(args[5]);
 		double filterthreshold = Double.parseDouble(args[6]);
+		int totaliter = Integer.parseInt(args[7]);
 
 		String iteration_id = "incrpagerank" + new Date().getTime();
  
@@ -204,7 +205,7 @@ public class IncrPageRank {
 	    
 	    long itertime = 0;
 	    
-	    while(cont && iteration <=20){
+	    while(cont && iteration <=totaliter){
 	    	long iterstart = System.currentTimeMillis();
 	    	
 		    JobConf job = new JobConf(IncrPageRank.class);

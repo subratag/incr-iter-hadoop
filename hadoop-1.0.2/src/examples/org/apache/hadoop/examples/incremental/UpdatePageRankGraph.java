@@ -45,6 +45,7 @@ public class UpdatePageRankGraph {
 		private Set<Long> deletelist = new HashSet<Long>();
 		private IFile.TrippleWriter<LongWritable, Text, Text> writer;
 		private boolean delete;
+		private int totalnum;
 		private JobConf conf;
 		
 		@Override
@@ -57,6 +58,7 @@ public class UpdatePageRankGraph {
 					deletelist.add((long)100*i);
 				}
 			}
+			totalnum = job.getInt("pagerank.delta.totalnum", -1);
 	
 			FileSystem fs;
 			try {
@@ -102,15 +104,17 @@ public class UpdatePageRankGraph {
 					writer.append(key, new Text(outputv), new Text("-"));
 					System.out.println(key + "\t" + outputv + "\t-");
 					
-					int randend = rand.nextInt(Integer.MAX_VALUE);
+					/*
+					int randend = rand.nextInt(totalnum);
 					while(randend == key.get()){
-						randend = rand.nextInt(Integer.MAX_VALUE);
+						randend = rand.nextInt(totalnum);
 					}
+					*/
 					
 					//write to the new structure file
-					outputv += randend;
+					//outputv += randend;
+					outputv += "27";
 					
-					//outputv += "27";
 					output.collect(key, new Text(outputv));
 					
 					//write to the delta file
@@ -153,11 +157,11 @@ public class UpdatePageRankGraph {
 	
 	private static void printUsage() {
 		System.out.println("incrpagerank <OldStatic> <UpdateGraph> <DeltaGraph><outDir> " +
-				"<partitions> <change percent> <contain delete>");
+				"<partitions> <change percent> <contain delete> <totalnum>");
 	}
 
 	public static int main(String[] args) throws Exception {
-		if (args.length < 6) {
+		if (args.length < 7) {
 			printUsage();
 			return -1;
 		}
@@ -168,6 +172,7 @@ public class UpdatePageRankGraph {
 	    int partitions = Integer.parseInt(args[3]);
 	    float changepercent = Float.parseFloat(args[4]);
 		boolean delete = Boolean.parseBoolean(args[5]);
+		int totalnum = Integer.parseInt(args[6]);
 
 		/**
 		 * update the graph manually
@@ -192,6 +197,7 @@ public class UpdatePageRankGraph {
 	    job0.setFloat("incr.pagerank.change.percent", changepercent);		//the delta change percent of update/add
 	    job0.setBoolean("pagerank.delta.contain.delete", delete);			//contain delete change or not
 	    job0.set("pagerank.delta.update.path", deltaoutput);
+	    job0.setInt("pagerank.delta.totalnum", totalnum);
 
 	    job0.setNumReduceTasks(partitions);
 	    

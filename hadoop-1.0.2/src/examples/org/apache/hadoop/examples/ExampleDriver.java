@@ -21,6 +21,7 @@ package org.apache.hadoop.examples;
 import org.apache.hadoop.examples.dancing.DistributedPentomino;
 import org.apache.hadoop.examples.dancing.Sudoku;
 import org.apache.hadoop.examples.incremental.ComPageRank;
+import org.apache.hadoop.examples.incremental.CompSeqFile;
 import org.apache.hadoop.examples.incremental.IncrPageRank;
 import org.apache.hadoop.examples.incremental.UpdatePageRankGraph;
 import org.apache.hadoop.examples.iterative.Kmeans;
@@ -85,6 +86,7 @@ public class ExampleDriver {
       pgd.addClass("genprupdate", UpdatePageRankGraph.class, "generate pagerank graph update");
       pgd.addClass("incrpagerank", IncrPageRank.class, "incremental pagerank");
       pgd.addClass("compagerank", ComPageRank.class, "for comparing the normal pagerank");
+      pgd.addClass("compseqfile", CompSeqFile.class, "for comparing two seq files");
       pgd.addClass("test", Test.class, "test");
       
       pgd.driver(argv);
