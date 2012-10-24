@@ -486,6 +486,8 @@ class ReduceTask extends Task {
 		  KEY key;
 		  SOURCEKEY source;
 		  VALUE value;
+		  boolean hasNext = false;
+		  boolean processed = false;
 		  
 		  KSVTuple(KEY key, SOURCEKEY source, VALUE value){
 			  this.key = key;
@@ -929,8 +931,10 @@ class ReduceTask extends Task {
 				  record = null;
 				  return res;
 			  } else {
-				  KSVTuple res = new KSVTuple(record.key, record.source, record.value);
-				  return res;
+				  //key bigger than the input key, next key
+				  //KSVTuple res = new KSVTuple(record.key, record.source, record.value);
+				  //return res;
+				  return null;
 			  }
 		  }
 		  
@@ -993,6 +997,7 @@ class ReduceTask extends Task {
 		protected Progressable reporter;
 		private JobConf job;
 		private Path newPreservePath;
+		private boolean preserveHasNext = true;
 	    
 	    public IncrementalSourceValuesIterator (RawKeyValueSourceIterator in, 
 	    						RawKeyValueSourceIterator preserveIn, 
@@ -1040,11 +1045,15 @@ class ReduceTask extends Task {
 	    /// Iterator methods
 
 	    public boolean hasNext() {
-	    	if(currPreserveRecord != null && currDeltaRecord.key.equals(currPreserveRecord.key)){
-	    		return true;
+	    	if(currDeltaRecord == null){
+	    		return preserveHasNext;
+	    	}else if(currPreserveRecord == null){
+	    		//if currdeltarecord is still that one, continue process the currdeltarecord
+	    		return currDeltaRecord.hasNext;
+	    		//if(nextDeltaRecord != null) return currDeltaRecord.key.equals(nextDeltaRecord.key);
 	    	}else{
-	    		if(nextDeltaRecord != null) return currDeltaRecord.key.equals(nextDeltaRecord.key);
-	    		return false;
+	    		//LOG.info("check has next " + currDeltaRecord.key + "\t" + currPreserveRecord.key);
+	    		return currDeltaRecord.key.equals(currPreserveRecord.key);
 	    	}
     	}
 
@@ -1056,33 +1065,91 @@ class ReduceTask extends Task {
 	     */
 	    public VALUE next() {
 	    	try {
-	    		if(currDeltaRecord.key.equals(currPreserveRecord.key)){
+	    		if(currDeltaRecord != null) currDeltaRecord.hasNext = false;
+	    		preserveHasNext = false;
+	    		
+	    		if(currDeltaRecord == null){
+	    			 //process the preserve file entry
+			    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
+
+			    	  currPreserveRecord = preserveReader.getNextValue(currPreserveRecord.key);
+			    	  if(currPreserveRecord != null){
+			    		  preserveHasNext = true;
+			    	  }else{
+			    		  preserveHasNext = false;
+			    	  }
+			    	  
+			    	  preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
+			    	  //LOG.info("deltanull write: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source + "\t" + currPreserveRecord);
+			    	  
+	    		}else if(currPreserveRecord == null){
+		  	    	  //process the new file entry
+		  	    	  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+		  	    	  
+		  	    	  if(more){
+			    		  //read a line of delta file if these two are with the same key
+			    		  if(currDeltaRecord.key.equals(nextDeltaRecord.key)){
+				  	    	  currDeltaRecord = nextDeltaRecord;
+				  	    	  nextDeltaRecord = deltaReader.nextRecord();
+				  	    	  if(nextDeltaRecord == null) more = false;
+				  	    	
+				  	    	  currDeltaRecord.hasNext = true;
+				  	    	  currDeltaRecord.processed = false;
+				  	    	  //LOG.info("delta extract: " + nextDeltaRecord);
+			    		  }
+		  	    	  }else{
+		  	    		currDeltaRecord = null;
+		  	    	  }
+
+				      preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
+				      
+				      //LOG.info("extract delta key " + currDeltaRecord.key + "\t" + currDeltaRecord.source + "\t" + currDeltaRecord.value);
+	    		}else if(currDeltaRecord.key.equals(currPreserveRecord.key)){
 	    			  int cmpres = comparator2.compare(currDeltaRecord.source, currPreserveRecord.source);
 			    	  
 			    	  //LOG.info("comparing " + currDeltaRecord.source + " and " + currPreserveRecord.source + " result is " + cmpres);
 
 			  	      if(cmpres < 0){
-			  	    	  //read the delta file if we have more new delta kv pairs for the same key
-			    		  if(nextDeltaRecord != null && currDeltaRecord.key.equals(nextDeltaRecord.key)){
-				  	    	  //process the new file entry
-				  	    	  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
-				  	    	  
-				  	    	  currDeltaRecord = nextDeltaRecord;
-				  	    	  nextDeltaRecord = deltaReader.nextRecord();
-				  	    	  if(nextDeltaRecord == null) more = false;
-				  	    	
-				  	    	  //LOG.info("delta extract: " + nextDeltaRecord);
-				  	    	  
-				  	    	  //LOG.info("process new delta: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value);
-			    		  }
-			    		  //read the preserve file for processing the remaining kv pairs for the key
-			    		  else{
-					    	  //process the preserve file entry
-					    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
-					        	
-					    	  currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
-					    	  //LOG.info("process preserve data: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 
-			    		  }
+			  	    	  if(nextDeltaRecord == null){
+			    			  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+			    			  preserveHasNext = true;
+			    			  currDeltaRecord = null;
+			  	    	  }else{
+			  	    		//read the delta file if we have more new delta kv pairs for the same key
+				    		  if(currDeltaRecord.key.equals(nextDeltaRecord.key)){
+					  	    	  //process the new file entry
+					  	    	  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+					  	    	  
+					  	    	  currDeltaRecord = nextDeltaRecord;
+					  	    	  currDeltaRecord.processed = false;
+					  	    	  nextDeltaRecord = deltaReader.nextRecord();
+					  	    	  
+					  	    	  if (nextDeltaRecord == null){
+					  	    		  more = false;
+					  	    	  } else if(currDeltaRecord.key.equals(nextDeltaRecord.key)){
+					  	    		  currDeltaRecord.hasNext = true;
+					  	    	  }
+					  	    	  
+					  	    	  //LOG.info("delta extract: " + nextDeltaRecord);
+					  	    	  
+					  	    	  //LOG.info("process new delta: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value);
+				    		  }
+				    		  //not processed delta record
+				    		  else if(!currDeltaRecord.processed){
+				    			  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+				    			  currDeltaRecord.processed = true;
+				    		  }
+				    		  //already processed delta record, then read the preserve file for processing the remaining kv pairs for the key
+				    		  else{
+						    	  //process the remaining preserve file entry
+						    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
+						        	
+						    	  currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
+						    	  
+						    	  //LOG.info("process preserve data: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 
+				    		  }
+			  	    	  }
+			  	    	  
 			  	    	  
 					      preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
 					      //LOG.info("preserve write1: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
@@ -1090,13 +1157,16 @@ class ReduceTask extends Task {
 				    	  //process the preserve file entry
 				    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
 				        	
+				    	  if(currDeltaRecord.key.equals(currPreserveRecord.key)){
+				    		  currDeltaRecord.hasNext = true;
+				    	  }
+				    	  
 				    	  currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
 				    	  
 				    	  preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
-				    	  //LOG.info("preserve write2: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
+				    	  //LOG.info("preserve write2: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source + "\t" + currPreserveRecord);
 				    	  //LOG.info("process preserve data: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 	
 				      }else{
-				    	  
 			    		  //read a line of preserve file, meaning skipping that record
 			    		  currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
 			    		  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
@@ -1105,23 +1175,35 @@ class ReduceTask extends Task {
 				    	  if(!currDeltaRecord.value.equals(negativeV)){
 				  	    	  preserveWriter.append(returnTuple.key, returnTuple.value, returnTuple.source);
 				  	    	  //LOG.info("replace record: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 
-				  	    	//LOG.info("preserve write3: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
+				  	    	  //LOG.info("preserve write3: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 				    	  }else{
 				  	    	  //LOG.info("skip record: " + returnTuple.key + "\t" + returnTuple.source); 
 				    	  }
 				    	  
 			    		  //read a line of delta file if these two are with the same key
 				    	  if(nextDeltaRecord == null){
+				    		  if(currPreserveRecord != null){
+				    			  preserveHasNext = true;
+				    		  }else{
+				    			  preserveHasNext = false;
+				    		  }
+				    		  
+				    		  currDeltaRecord = null;
 				    		  more = false;
 				    	  }else{
 				    		  if(currDeltaRecord.key.equals(nextDeltaRecord.key)){
 					  	    	  currDeltaRecord = nextDeltaRecord;
+					  	    	  currDeltaRecord.processed = false;
 					  	    	  nextDeltaRecord = deltaReader.nextRecord();
 					  	    	  //LOG.info("delta extract: " + nextDeltaRecord);
+					  	    	  
+					  	    	  currDeltaRecord.hasNext = true;
 					  	    	  
 					  	    	  if(nextDeltaRecord == null){
 						    		  more = false;
 						    	  }
+				    		  }else{
+				    			  currDeltaRecord.processed = true;
 				    		  }
 				    	  }
 				      }
@@ -1132,9 +1214,11 @@ class ReduceTask extends Task {
 		    		  //read a line of delta file if these two are with the same key
 		    		  if(currDeltaRecord.key.equals(nextDeltaRecord.key)){
 			  	    	  currDeltaRecord = nextDeltaRecord;
+			  	    	  currDeltaRecord.processed = false;
 			  	    	  nextDeltaRecord = deltaReader.nextRecord();
 			  	    	  if(nextDeltaRecord == null) more = false;
 			  	    	
+			  	    	  currDeltaRecord.hasNext = true;
 			  	    	  //LOG.info("delta extract: " + nextDeltaRecord);
 		    		  }
 		  	    	  
@@ -1157,20 +1241,35 @@ class ReduceTask extends Task {
 	    /** Start processing next unique key. */
 	    void nextKey() throws IOException {
 
+	    	/*
+	    	if(!more){
+	    		preserveReader.setNextKey();
+	    		currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
+	    		currDeltaRecord.hasNext = true;
+	    		++ctr;
+	    		LOG.info("no more data");
+	    		return;
+	    	}
+	    	*/
+	    	if(currDeltaRecord == null){
+	    		//LOG.info("no more data");
+	    		return;
+	    	}
+	    	
 	    	currDeltaRecord = nextDeltaRecord;
+	    	currDeltaRecord.processed = false;
 	    	nextDeltaRecord = deltaReader.nextRecord();
 
-	    	//LOG.info("delta extract: " + nextDeltaRecord);
-	    	  
+	    	//LOG.info("next record: " + currDeltaRecord);
+
+	    	preserveReader.setNextKey();
+	    	
+	    	currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
+	    	currDeltaRecord.hasNext = true;
+	    	++ctr;
+	    	
 	    	if(nextDeltaRecord == null){
 	    		more = false;
-	    	}else{
-		    	preserveReader.setNextKey();
-		    	
-		    	currPreserveRecord = preserveReader.getNextValue(currDeltaRecord.key);
-		    	
-		    	//LOG.info("next key " + currDeltaRecord.key);
-		    	++ctr;
 	    	}
 	    }
 	    
@@ -1180,7 +1279,8 @@ class ReduceTask extends Task {
 
 	    /** True iff more keys remain. */
 	    boolean more() { 
-	      return more; 
+	      //return more; 
+	    	return currDeltaRecord != null;
 	    }
 
 	    /** The current key. */
