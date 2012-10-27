@@ -1762,10 +1762,10 @@ class ReduceTask extends Task {
 		if(diff >= conf.getFilterThreshold()){
 			//localwriter.write(key, value);
 			filterwriter.write(key, value);
-			LOG.info("collect " + key + "\t" + value + " diff " + diff);
+			//LOG.info("collect " + key + "\t" + value + " diff " + diff);
 			nonConvergedItems++;
 		}else{
-			LOG.info("skip " + key + "\t" + value + " diff " + diff);
+			//LOG.info("skip " + key + "\t" + value + " diff " + diff);
 		}
 		
 		//for single preserve file
