@@ -171,6 +171,8 @@ public interface TaskUmbilicalProtocol extends VersionedProtocol {
                                                        JvmContext jvmContext) 
   throws IOException;
 
+  ReduceTaskCompletionEventsUpdate getLocalReduceCompletionEvents(JobID jobId, int iteration) 
+											throws IOException;
   /**
    * The job initializer needs to report the sizes of the archive
    * objects and directories in the private distributed cache.
@@ -184,4 +186,6 @@ public interface TaskUmbilicalProtocol extends VersionedProtocol {
   void iterativeTaskComplete(IterativeTaskCompletionEvent event) throws IOException;
   
   void transmitGlobalData(GlobalData globaldata) throws IOException;
+  
+  
 }

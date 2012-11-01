@@ -35,9 +35,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -52,6 +50,7 @@ import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
@@ -80,52 +79,14 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 
 /** A Map task. */
-class MapTask extends Task {
+class MapTask_backup extends Task {
   /**
    * The size of each record in the index file for the map-outputs.
    */
-	
-	private class ReduceOutputFetcher extends Thread {
-		private TaskUmbilicalProtocol trackerUmbilical;
-		private MapTask maptask;
-		
-		public ReduceOutputFetcher(TaskUmbilicalProtocol trackerUmbilical, MapTask maptask) {
-			this.trackerUmbilical = trackerUmbilical;
-			this.maptask = maptask;
-		}
-
-		public void run() {
-			while (!isInterrupted()/* && finishedReduceTasks.size() < getNumberOfInputs()+1*/) {
-				try {
-					ReduceTaskCompletionEventsUpdate updates = 
-						trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
-
-					//now, we only consider the one-to-one mapping
-					for(int taskid : updates.getCompleteTaskIDs()){
-						if(taskid == getTaskID().getTaskID().getId()){
-							maptask.notifyAll();
-							break;
-						}
-					}
-				}
-				catch (IOException e) {
-					e.printStackTrace();
-				}
-
-				try {
-					Thread.sleep(1000);
-				} catch (InterruptedException e) { return; }
-			}
-		}
-	}
-	
-	
   public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 24;
 
   private TaskSplitIndex splitMetaInfo = new TaskSplitIndex();
   private final static int APPROX_HEADER_LENGTH = 150;
-  
-  private int iteration = 1;
 
   private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -133,11 +94,11 @@ class MapTask extends Task {
     setPhase(TaskStatus.Phase.MAP); 
   }
 
-  public MapTask() {
+  public MapTask_backup() {
     super();
   }
 
-  public MapTask(String jobFile, TaskAttemptID taskId, 
+  public MapTask_backup(String jobFile, TaskAttemptID taskId, 
                  int partition, TaskSplitIndex splitIndex,
                  int numSlotsRequired) {
     super(jobFile, taskId, partition, numSlotsRequired);
@@ -516,7 +477,6 @@ class MapTask extends Task {
       return;
     }
 
-
     if (useNewApi) {
       runNewMapper(job, splitMetaInfo, umbilical, reporter);
     } else {
@@ -528,30 +488,7 @@ class MapTask extends Task {
     	}else if(job.isIncrementalStart()){
     		runIncrementalMapper(job, splitMetaInfo, umbilical, reporter);
     	}else if(job.isIncrementalIterative()){
-    		ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, this);
-    		rof.setDaemon(true);
-    		rof.start();
-    		
-    		try{
-    			while(true){
-        			iteration++;
-        			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
-
-        			synchronized(this){
-        				try {
-        					this.wait();
-        				} catch (InterruptedException e) {
-        					// TODO Auto-generated catch block
-        					e.printStackTrace();
-        				}
-        			}
-    				
-        		}
-    		}finally{
-				rof.interrupt();
-				rof = null;
-    		}
-    		
+    		runIncrementalIterativeMapper(job, splitMetaInfo, umbilical, reporter);
     	}else{
     		runOldMapper(job, splitMetaInfo, umbilical, reporter);
     	}
@@ -1247,7 +1184,7 @@ class MapTask extends Task {
   
   @SuppressWarnings("unchecked")
   private <SK extends WritableComparable, SV, DK extends WritableComparable, DV, K2, V2 extends Writable>
-  void runIncrementalIterativeMapper(final JobConf job, int iteration,
+  void runIncrementalIterativeMapper(final JobConf job,
                     final TaskSplitIndex splitIndex,
                     final TaskUmbilicalProtocol umbilical,
                     TaskReporter reporter
@@ -1259,7 +1196,7 @@ class MapTask extends Task {
 	localfs = FileSystem.getLocal(job);
 
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
-	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, iteration-1, reporter);					//converged result reader
+	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, job.getIterationNum()-1, reporter);					//converged result reader
 	
     IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
     Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
@@ -1339,7 +1276,7 @@ class MapTask extends Task {
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
     
-    LOG.info("finish task wave in " + (taskend - taskstart) + " s");
+    LOG.info("finish task in " + (taskend - taskstart) + " s");
     
 	try {
 		umbilical.iterativeTaskComplete(event);

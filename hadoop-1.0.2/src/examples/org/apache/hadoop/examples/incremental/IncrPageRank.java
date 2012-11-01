@@ -205,7 +205,7 @@ public class IncrPageRank {
 	    
 	    long itertime = 0;
 	    
-	    while(cont && iteration <=totaliter){
+	   // while(cont && iteration <=totaliter){
 	    	long iterstart = System.currentTimeMillis();
 	    	
 		    JobConf job = new JobConf(IncrPageRank.class);
@@ -253,7 +253,7 @@ public class IncrPageRank {
 	    	Util.writeLog("incr.pagerank.log", "iteration computation " + iteration + " takes " + itertime + " s");
 	    	
 	    	iteration++;
-	    }
+	    //}
 	    
 	    return 0;
 	}

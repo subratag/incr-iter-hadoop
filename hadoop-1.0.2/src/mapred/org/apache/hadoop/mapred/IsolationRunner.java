@@ -144,6 +144,13 @@ public class IsolationRunner {
 		// TODO Auto-generated method stub
 		
 	}
+
+	@Override
+	public ReduceTaskCompletionEventsUpdate getLocalReduceCompletionEvents(
+			JobID jobId, int iteration) throws IOException {
+		// TODO Auto-generated method stub
+		return null;
+	}
   }
   
   private ClassLoader makeClassLoader(JobConf conf, 
