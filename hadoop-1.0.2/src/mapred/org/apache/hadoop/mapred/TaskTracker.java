@@ -4403,7 +4403,6 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 		if(!completeReduceTasks.containsKey(jobid)){
 			HashMap<Integer, ArrayList<Integer>> completeTasks = new HashMap<Integer, ArrayList<Integer>>();
 			completeReduceTasks.put(jobid, completeTasks);
-			
 		}
 		
 		completeReduceTasks.get(jobid).get(iteration).add(taskid);
