@@ -1487,9 +1487,6 @@ class ReduceTask extends Task {
     	if(IsPreserveMore){
     		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
     	}else{
-    		
-    		
-    		
     		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
     	}
     	runIncrementalIterativeReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
