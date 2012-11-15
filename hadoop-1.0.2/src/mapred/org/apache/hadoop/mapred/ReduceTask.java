@@ -1430,73 +1430,130 @@ class ReduceTask extends Task {
     codec = initCodec();
 
     boolean isLocal = "local".equals(job.get("mapred.job.tracker", "local"));
-    if (!isLocal) {
-      reduceCopier = new ReduceCopier(umbilical, job, reporter);
-      if (!reduceCopier.fetchOutputs()) {
-        if(reduceCopier.mergeThrowable instanceof FSError) {
-          throw (FSError)reduceCopier.mergeThrowable;
+
+    //the common case, for the case that is not incremental iterative app
+    if(!job.isIncrementalIterative()){
+        if (!isLocal) {
+            reduceCopier = new ReduceCopier(umbilical, job, reporter);
+            if (!reduceCopier.fetchOutputs()) {
+              if(reduceCopier.mergeThrowable instanceof FSError) {
+                throw (FSError)reduceCopier.mergeThrowable;
+              }
+              throw new IOException("Task: " + getTaskID() + 
+                  " - The reduce copier failed", reduceCopier.mergeThrowable);
+            }
+		}
+		copyPhase.complete();                         // copy is already complete
+		setPhase(TaskStatus.Phase.SORT);
+		statusUpdate(umbilical);
+		  
+		hdfs = FileSystem.get(job);
+		localfs = FileSystem.getLocal(job);
+		
+		final FileSystem rfs = FileSystem.getLocal(job).getRaw();
+          
+        RawKeyValueIterator rIter = isLocal
+          ? Merger.merge(job, rfs, job.getMapOutputKeyClass(),
+              job.getMapOutputValueClass(), codec, getMapFiles(rfs, true),
+              !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
+              new Path(getTaskID().toString()), job.getOutputKeyComparator(),
+              reporter, spilledRecordsCounter, null)
+          : (job.isPreserve() || job.isIncrementalStart() || job.isIncrementalIterative()) ? reduceCopier.createKVSIterator(job, rfs, reporter)
+        		  : reduceCopier.createKVIterator(job, rfs, reporter);
+
+        // free up the data structures
+        mapOutputFilesOnDisk.clear();
+        
+        sortPhase.complete();                         // sort is complete
+        setPhase(TaskStatus.Phase.REDUCE); 
+        statusUpdate(umbilical);
+        Class keyClass = job.getMapOutputKeyClass();
+        Class valueClass = job.getMapOutputValueClass();
+        RawComparator comparator = job.getOutputValueGroupingComparator();
+        
+        if (job.isIterative()){
+        	runIterativeReducer(job, umbilical, reporter, rIter, comparator, 
+                    keyClass, valueClass);
+        }else if(job.isPreserve()){
+        	runPreserveReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, comparator, 
+                    keyClass, valueClass, job.getStaticKeyClass());
+        }else if(job.isIncrementalStart()){
+        	RawKeyValueSourceIterator preserveIter = null;
+        	if(IsPreserveMore){
+        		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
+        	}else{
+        		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+        	}
+        	runIncrementalReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
+                        keyClass, valueClass, job.getStaticKeyClass());
+        } else if(useNewApi) {
+          runNewReducer(job, umbilical, reporter, rIter, comparator, 
+                        keyClass, valueClass);
+        } else {
+          runOldReducer(job, umbilical, reporter, rIter, comparator, 
+                        keyClass, valueClass);
         }
-        throw new IOException("Task: " + getTaskID() + 
-            " - The reduce copier failed", reduceCopier.mergeThrowable);
-      }
     }
-    copyPhase.complete();                         // copy is already complete
-    setPhase(TaskStatus.Phase.SORT);
-    statusUpdate(umbilical);
-    
-    hdfs = FileSystem.get(job);
-    localfs = FileSystem.getLocal(job);
+    //the special case, for the case that is incremental iterative app, we use a single job
+    else{
+        if (!isLocal) {
+            reduceCopier = new ReduceCopier(umbilical, job, reporter);
+            if (!reduceCopier.fetchOutputs()) {
+              if(reduceCopier.mergeThrowable instanceof FSError) {
+                throw (FSError)reduceCopier.mergeThrowable;
+              }
+              throw new IOException("Task: " + getTaskID() + 
+                  " - The reduce copier failed", reduceCopier.mergeThrowable);
+            }
+        }
+        copyPhase.complete();                         // copy is already complete
+        setPhase(TaskStatus.Phase.SORT);
+        statusUpdate(umbilical);
+          
+        hdfs = FileSystem.get(job);
+        localfs = FileSystem.getLocal(job);
 
-    final FileSystem rfs = FileSystem.getLocal(job).getRaw();
-    RawKeyValueIterator rIter = isLocal
-      ? Merger.merge(job, rfs, job.getMapOutputKeyClass(),
-          job.getMapOutputValueClass(), codec, getMapFiles(rfs, true),
-          !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
-          new Path(getTaskID().toString()), job.getOutputKeyComparator(),
-          reporter, spilledRecordsCounter, null)
-      : (job.isPreserve() || job.isIncrementalStart() || job.isIncrementalIterative()) ? reduceCopier.createKVSIterator(job, rfs, reporter)
-    		  : reduceCopier.createKVIterator(job, rfs, reporter);
+        final FileSystem rfs = FileSystem.getLocal(job).getRaw();
+        
+    	while(true){
+            RawKeyValueIterator rIter = isLocal
+              ? Merger.merge(job, rfs, job.getMapOutputKeyClass(),
+                  job.getMapOutputValueClass(), codec, getMapFiles(rfs, true),
+                  !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
+                  new Path(getTaskID().toString()), job.getOutputKeyComparator(),
+                  reporter, spilledRecordsCounter, null)
+              : (job.isPreserve() || job.isIncrementalStart() || job.isIncrementalIterative()) ? reduceCopier.createKVSIterator(job, rfs, reporter)
+            		  : reduceCopier.createKVIterator(job, rfs, reporter);
 
-    // free up the data structures
-    mapOutputFilesOnDisk.clear();
-    
-    sortPhase.complete();                         // sort is complete
-    setPhase(TaskStatus.Phase.REDUCE); 
-    statusUpdate(umbilical);
-    Class keyClass = job.getMapOutputKeyClass();
-    Class valueClass = job.getMapOutputValueClass();
-    RawComparator comparator = job.getOutputValueGroupingComparator();
-
-    if (job.isIterative()){
-    	runIterativeReducer(job, umbilical, reporter, rIter, comparator, 
-                keyClass, valueClass);
-    }else if(job.isPreserve()){
-    	runPreserveReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, comparator, 
-                keyClass, valueClass, job.getStaticKeyClass());
-    }else if(job.isIncrementalStart()){
-    	RawKeyValueSourceIterator preserveIter = null;
-    	if(IsPreserveMore){
-    		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
-    	}else{
-    		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+            // free up the data structures
+            mapOutputFilesOnDisk.clear();
+            
+            sortPhase.complete();                         // sort is complete
+            setPhase(TaskStatus.Phase.REDUCE); 
+            statusUpdate(umbilical);
+            Class keyClass = job.getMapOutputKeyClass();
+            Class valueClass = job.getMapOutputValueClass();
+            RawComparator comparator = job.getOutputValueGroupingComparator();
+            
+        	RawKeyValueSourceIterator preserveIter = null;
+        	if(IsPreserveMore){
+        		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
+        	}else{
+        		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+        	}
+        	runIncrementalIterativeReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
+                        keyClass, valueClass, job.getStaticKeyClass());
+        	
+			synchronized(this){
+				try {
+					this.wait();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
     	}
-    	runIncrementalReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
-                    keyClass, valueClass, job.getStaticKeyClass());
-    }else if(job.isIncrementalIterative()){
-    	RawKeyValueSourceIterator preserveIter = null;
-    	if(IsPreserveMore){
-    		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
-    	}else{
-    		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
-    	}
-    	runIncrementalIterativeReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
-                    keyClass, valueClass, job.getStaticKeyClass());
-    }else if(useNewApi) {
-      runNewReducer(job, umbilical, reporter, rIter, comparator, 
-                    keyClass, valueClass);
-    } else {
-      runOldReducer(job, umbilical, reporter, rIter, comparator, 
-                    keyClass, valueClass);
+
     }
 
     done(umbilical, reporter);
