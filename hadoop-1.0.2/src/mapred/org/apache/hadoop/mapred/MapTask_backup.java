@@ -732,7 +732,7 @@ class MapTask_backup extends Task {
     
     //report iterative task information
     IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
-    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
     
@@ -897,7 +897,7 @@ class MapTask_backup extends Task {
 	    
 	    //report iterative task information
 	    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
-	    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+	    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
 	    event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
 	    event.setRunTime(taskend - taskstart);
 	    
@@ -1170,7 +1170,7 @@ class MapTask_backup extends Task {
     
     //report iterative task information
     IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), 0, 
-    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
     
@@ -1272,7 +1272,7 @@ class MapTask_backup extends Task {
     
     //report iterative task information
     IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
-    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
     

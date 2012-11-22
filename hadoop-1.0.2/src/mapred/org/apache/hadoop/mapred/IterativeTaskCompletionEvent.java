@@ -12,6 +12,7 @@ public class IterativeTaskCompletionEvent implements Writable {
 	Text iterativeAppId = new Text();
 	JobID jobID = new JobID();
 	int iterationNum = 0;
+	TaskAttemptID attemptID = new TaskAttemptID();
 	int taskid = 0;
 	boolean ismap = true;
 	long processedRecords = 0;
@@ -21,10 +22,12 @@ public class IterativeTaskCompletionEvent implements Writable {
 	
 	public IterativeTaskCompletionEvent() {};
 	
-	public IterativeTaskCompletionEvent(String iterappid, JobID job, int iterNum, int id, boolean isMap){
+	public IterativeTaskCompletionEvent(String iterappid, JobID job, int iterNum, 
+			TaskAttemptID attemptID, int id, boolean isMap){
 		iterativeAppId = new Text(iterappid);
 		jobID = job;
 		iterationNum = iterNum;
+		this.attemptID = attemptID;
 		taskid = id;
 		ismap = isMap;
 	}
@@ -35,6 +38,14 @@ public class IterativeTaskCompletionEvent implements Writable {
 	
 	public int getIteration(){
 		return iterationNum;
+	}
+	
+	public TaskAttemptID getAttemptID(){
+		return attemptID;
+	}
+	
+	public void setAttemptID(TaskAttemptID attemptID){
+		this.attemptID = attemptID;
 	}
 	
 	public int gettaskID(){
@@ -80,6 +91,7 @@ public class IterativeTaskCompletionEvent implements Writable {
 		this.iterativeAppId.readFields(in);
 		this.jobID.readFields(in);
 		this.iterationNum = in.readInt();
+		this.attemptID.readFields(in);
 		this.taskid = in.readInt();
 		this.ismap = in.readBoolean();
 		this.processedRecords = in.readLong();
@@ -92,10 +104,23 @@ public class IterativeTaskCompletionEvent implements Writable {
 		this.iterativeAppId.write(out);
 		this.jobID.write(out);
 		out.writeInt(this.iterationNum);
+		this.attemptID.write(out);
 		out.writeInt(this.taskid);
 		out.writeBoolean(this.ismap);
 		out.writeLong(this.processedRecords);
 		out.writeLong(this.spentMilliseconds);
 		out.writeFloat(this.distance);
+	}
+	
+	@Override
+	public String toString(){
+		return "IterativeTaskCompletionEvent --- jobid: " + jobID +
+				"\niteration: " + iterationNum +
+				"\nattempttaskid: " + attemptID + 
+				"\nisMap: " + ismap +
+				"\nprocessedRecords: " + processedRecords +
+				"\nspentMilliseconds: " + spentMilliseconds + 
+				"\ndistance: " + distance;
+	
 	}
 }

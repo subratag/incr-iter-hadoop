@@ -30,12 +30,13 @@ import org.apache.hadoop.io.WritableUtils;
  * job tracker. 
  */
 public class TaskCompletionEvent implements Writable{
-  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED};
+  static public enum Status {FAILED, KILLED, SUCCEEDED, OBSOLETE, TIPFAILED, RUNNING};
     
   private int eventId; 
   private String taskTrackerHttp;
   private int taskRunTime; // using int since runtime is the time difference
   private TaskAttemptID taskId;
+  private int iteration = 0;
   Status status; 
   boolean isMap = false;
   private int idWithinJob;
@@ -62,12 +63,14 @@ public class TaskCompletionEvent implements Writable{
                              TaskAttemptID taskId,
                              int idWithinJob,
                              boolean isMap,
+                             int iteration,
                              Status status, 
                              String taskTrackerHttp){
       
     this.taskId = taskId;
     this.idWithinJob = idWithinJob;
     this.isMap = isMap;
+    this.iteration = iteration;
     this.eventId = eventId; 
     this.status =status; 
     this.taskTrackerHttp = taskTrackerHttp;
@@ -87,6 +90,10 @@ public class TaskCompletionEvent implements Writable{
   @Deprecated
   public String getTaskId() {
     return taskId.toString();
+  }
+  
+  public int getIteration(){
+	  return iteration;
   }
   
   /**
@@ -143,6 +150,10 @@ public class TaskCompletionEvent implements Writable{
   @Deprecated
   public void setTaskId(String taskId) {
     this.taskId = TaskAttemptID.forName(taskId);
+  }
+  
+  public void setIteration(int iteration){
+	  this.iteration = iteration;
   }
   
   /**

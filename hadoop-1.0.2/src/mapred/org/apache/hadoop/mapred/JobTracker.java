@@ -3443,6 +3443,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         if (tasks == null ) {
           tasks = taskScheduler.assignTasks(taskTrackers.get(trackerName));
         }
+
         if (tasks != null) {
           for (Task task : tasks) {
             expireLaunchingTasks.addNewTask(task.getTaskID());

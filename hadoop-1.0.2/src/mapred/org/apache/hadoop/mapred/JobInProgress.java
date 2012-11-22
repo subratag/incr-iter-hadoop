@@ -161,6 +161,8 @@ public class JobInProgress {
   // A set of running reduce TIPs
   Set<TaskInProgress> runningReduces;
   
+  Set<TaskAttemptID> announcedRunningTasks = new HashSet<TaskAttemptID>();
+  
   // A list of cleanup tasks for the map task attempts, to be launched
   List<TaskAttemptID> mapCleanupTasks = new LinkedList<TaskAttemptID>();
   
@@ -1123,12 +1125,28 @@ public class JobInProgress {
                                             status.getIsMap() &&
                                             !tip.isJobCleanupTask() &&
                                             !tip.isJobSetupTask(),
+                                            status.getIteration(),
                                             TaskCompletionEvent.Status.SUCCEEDED,
                                             httpTaskLogLocation 
                                            );
         taskEvent.setTaskRunTime((int)(status.getFinishTime() 
                                        - status.getStartTime()));
         tip.setSuccessEventNumber(taskCompletionEventTracker); 
+      } else if (state == TaskStatus.State.RUNNING && !this.announcedRunningTasks.contains(taskid)) {
+          
+    	  taskEvent = new TaskCompletionEvent(
+                  taskCompletionEventTracker, 
+                  taskid,
+                  tip.idWithinJob(),
+                  status.getIsMap() &&
+                  !tip.isJobCleanupTask() &&
+                  !tip.isJobSetupTask(),
+                  status.getIteration(),
+                  TaskCompletionEvent.Status.RUNNING,
+                  httpTaskLogLocation 
+                 );
+
+          this.announcedRunningTasks.add(taskid);
       } else if (state == TaskStatus.State.COMMIT_PENDING) {
         // If it is the first attempt reporting COMMIT_PENDING
         // ask the task to commit.
@@ -1179,6 +1197,7 @@ public class JobInProgress {
                                             status.getIsMap() &&
                                             !tip.isJobCleanupTask() &&
                                             !tip.isJobSetupTask(),
+                                            status.getIteration(),
                                             taskCompletionStatus, 
                                             httpTaskLogLocation
                                            );
@@ -1662,7 +1681,11 @@ public class JobInProgress {
   }
   
   public synchronized boolean scheduleReduces() {
-    return finishedMapTasks >= completedMapsForReduceSlowstart;
+	  //added by yanfeng, ignore this limitation
+	  if(this.conf.isIncrementalIterative()){
+		  return true;
+	  }
+	  return finishedMapTasks >= completedMapsForReduceSlowstart;
   }
   
   /**

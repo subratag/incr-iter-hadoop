@@ -121,7 +121,7 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
 	      for (JobInProgress job : jobQueue) {
 	        if (job.getStatus().getRunState() == JobStatus.RUNNING) {
 	          remainingMapLoad += (job.desiredMaps() - job.finishedMaps());
-	          if (job.scheduleReduces()) {
+	          if (job.scheduleReduces()) {	
 	            remainingReduceLoad += 
 	              (job.desiredReduces() - job.finishedReduces());
 	          }
@@ -678,6 +678,7 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
                           taskTrackerManager.getNumberOfUniqueHosts());
 	          }
 	          
+	          LOG.info("try to assign new task " + t);
 	          if (t != null) {
 	            assignedTasks.add(t);
 	            break;

@@ -272,7 +272,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
    */
   Map<TaskAttemptID, TaskInProgress> runningTasks = null;
   Map<JobID, RunningJob> runningJobs = new TreeMap<JobID, RunningJob>();
-  Map<JobID, HashMap<Integer, ArrayList<Integer>>> completeReduceTasks = new HashMap<JobID, HashMap<Integer, ArrayList<Integer>>>();
+  Map<JobID, HashMap<Integer, ArrayList<IntWritable>>> completeReduceTasks = new HashMap<JobID, HashMap<Integer, ArrayList<IntWritable>>>();
   
   private final JobTokenSecretManager jobTokenSecretManager
     = new JobTokenSecretManager();
@@ -663,6 +663,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
       throw new IOException("Unknown protocol for task tracker: " +
                             protocol);
     }
+  }
+  
+  public Configuration conf() {
+	  return this.fConf;
   }
 
   /**
@@ -3562,12 +3566,34 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
   public ReduceTaskCompletionEventsUpdate getLocalReduceCompletionEvents(JobID jobId, int iteration) 
 		  throws IOException {
 	  RunningJob rjob;
+	  if(iteration == 0) iteration = 1;
+	  
 	  synchronized (runningJobs) {
+		  LOG.info("i am here! in running jobs");
 		  rjob = runningJobs.get(jobId);          
 		  if (rjob != null) {
 			  synchronized (rjob) {
-				  ArrayList<Integer> completeReduceTaskIDs = completeReduceTasks.get(jobId).get(iteration);
-				  return new ReduceTaskCompletionEventsUpdate(completeReduceTaskIDs);
+				  LOG.info("i am here! in " + rjob);
+				  if(!completeReduceTasks.containsKey(jobId)){
+					  //return new ReduceTaskCompletionEventsUpdate(new ArrayList<Integer>());
+					  return null;
+				  }
+				  
+				  if(!completeReduceTasks.get(jobId).containsKey(iteration)){
+					  //return new ReduceTaskCompletionEventsUpdate(new ArrayList<Integer>());
+					  return null;
+				  }
+				  
+				  ArrayList<IntWritable> completeReduceTaskIDs = completeReduceTasks.get(jobId).get(iteration);
+				  
+				  IntWritable[] completeTasks = new IntWritable[completeReduceTaskIDs.size()];
+				  for(int i=0; i<completeReduceTaskIDs.size(); i++){
+					  completeTasks[i] = new IntWritable(completeReduceTaskIDs.get(i).get());
+				  }
+				  
+				  LOG.info("return new tasks complete events " + completeTasks.length);
+				  
+				  return new ReduceTaskCompletionEventsUpdate(completeTasks);
 			  }
 		  }
 	  }
@@ -4398,14 +4424,27 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 		
 		JobID jobid = event.getJob();
 		int iteration = event.getIteration();
+		TaskAttemptID attemptID = event.getAttemptID();
 		int taskid = event.gettaskID();
 		
-		if(!completeReduceTasks.containsKey(jobid)){
-			HashMap<Integer, ArrayList<Integer>> completeTasks = new HashMap<Integer, ArrayList<Integer>>();
-			completeReduceTasks.put(jobid, completeTasks);
+		if(!event.getIsMap()){
+			if(!completeReduceTasks.containsKey(jobid)){
+				HashMap<Integer, ArrayList<IntWritable>> completeTasks = new HashMap<Integer, ArrayList<IntWritable>>();
+				completeReduceTasks.put(jobid, completeTasks);
+			}
+			
+			if(!completeReduceTasks.get(jobid).containsKey(iteration)){
+				ArrayList<IntWritable> completeTasks2 = new ArrayList<IntWritable>();
+				completeReduceTasks.get(jobid).put(iteration, completeTasks2);
+			}
+			
+			completeReduceTasks.get(jobid).get(iteration).add(new IntWritable(taskid));
 		}
+
 		
-		completeReduceTasks.get(jobid).get(iteration).add(taskid);
+		//add for checking iteration completion status
+		runningTasks.get(attemptID).getStatus().setIteration(iteration);
+		
 		this.jobClient.reportIterativeTaskCompletionEvent(event);
 	}
 

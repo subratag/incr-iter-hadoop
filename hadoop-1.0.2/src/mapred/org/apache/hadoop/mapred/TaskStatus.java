@@ -51,6 +51,7 @@ public abstract class TaskStatus implements Writable, Cloneable {
   private String stateString;
   private String taskTracker;
   private int numSlots;
+  private int iteration = 0;
     
   private long startTime; 
   private long finishTime; 
@@ -87,6 +88,9 @@ public abstract class TaskStatus implements Writable, Cloneable {
   public int getNumSlots() {
     return numSlots;
   }
+  
+  public int getIteration(){ return iteration;  }
+  public void setIteration(int iteration) { this.iteration = iteration; }
 
   public float getProgress() { return progress; }
   public void setProgress(float progress) { this.progress = progress; } 

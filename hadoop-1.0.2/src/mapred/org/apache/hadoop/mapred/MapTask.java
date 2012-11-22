@@ -52,6 +52,7 @@ import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
@@ -95,18 +96,30 @@ class MapTask extends Task {
 		}
 
 		public void run() {
+			int iteration = 1;
 			while (!isInterrupted()/* && finishedReduceTasks.size() < getNumberOfInputs()+1*/) {
 				try {
-					ReduceTaskCompletionEventsUpdate updates = 
-						trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
+					synchronized(maptask){
+						LOG.info("start reduce output fetcher thread!");
+						ReduceTaskCompletionEventsUpdate updates = 
+							trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
 
-					//now, we only consider the one-to-one mapping
-					for(int taskid : updates.getCompleteTaskIDs()){
-						if(taskid == getTaskID().getTaskID().getId()){
-							maptask.notifyAll();
-							break;
+						if(updates != null){
+							//now, we only consider the one-to-one mapping
+							for(IntWritable taskidwritable : updates.getCompleteTaskIDs()){
+								int taskid = taskidwritable.get();
+								LOG.info("got reduce complete events ! " + taskid);
+								if(taskid == getTaskID().getTaskID().getId()){
+									LOG.info(taskid + ":" + getTaskID().getTaskID().getId() + " got my reduce, let's start!");
+									maptask.notifyAll();
+									iteration++;
+									break;
+								}
+							}
 						}
 					}
+					
+
 				}
 				catch (IOException e) {
 					e.printStackTrace();
@@ -125,7 +138,7 @@ class MapTask extends Task {
   private TaskSplitIndex splitMetaInfo = new TaskSplitIndex();
   private final static int APPROX_HEADER_LENGTH = 150;
   
-  private int iteration = 1;
+  private int iteration = 0;
 
   private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -534,18 +547,19 @@ class MapTask extends Task {
     		
     		try{
     			while(true){
-        			iteration++;
-        			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
-
         			synchronized(this){
+            			iteration++;
+            			LOG.info("start iteration " + iteration);
+            			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
         				try {
+        					LOG.info("start waiting... ");
         					this.wait();
+        					LOG.info("notify signal recieved... ");
         				} catch (InterruptedException e) {
         					// TODO Auto-generated catch block
         					e.printStackTrace();
         				}
         			}
-    				
         		}
     		}finally{
 				rof.interrupt();
@@ -795,7 +809,7 @@ class MapTask extends Task {
     
     //report iterative task information
     IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
-    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
     
@@ -960,7 +974,7 @@ class MapTask extends Task {
 	    
 	    //report iterative task information
 	    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
-	    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+	    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
 	    event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
 	    event.setRunTime(taskend - taskstart);
 	    
@@ -1233,7 +1247,7 @@ class MapTask extends Task {
     
     //report iterative task information
     IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), 0, 
-    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
     
@@ -1331,11 +1345,12 @@ class MapTask extends Task {
     	dynamicReader.close();
     }
 
+    
     long taskend = new Date().getTime();
     
     //report iterative task information
-    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
-    		this.getTaskID().getTaskID().getId(), this.isMapTask());
+    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), iteration, 
+    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
     
@@ -1347,6 +1362,7 @@ class MapTask extends Task {
 		// TODO Auto-generated catch block
 		e.printStackTrace();
 	}
+	
   }
   
   	private <SK, SV> RecordReader<SK, SV> getStaticReader(JobConf job, TaskReporter reporter) throws IOException{
@@ -1509,8 +1525,7 @@ class MapTask extends Task {
 			return dynamicReader;
 	}
 	
-	private <DK,DV> RecordReader<DK, DV> getFilterDynamicReader(JobConf job, int iteration, TaskReporter reporter) throws IOException{
-		RecordReader<DK, DV> dynamicReader = null;					//converged result reader
+	private <DK,DV> RecordReader<DK, DV> getFilterDynamicReader(JobConf job, int iteration, TaskReporter reporter) throws IOException{ RecordReader<DK, DV> dynamicReader = null;					//converged result reader
 		
 		if(job.getDynamicDataPath() == null) throw new IOException("we need the converged dynamic data " +
 				"to perform incremental computation!!!");
