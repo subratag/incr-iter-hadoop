@@ -1,0 +1,603 @@
+Buildfile: /home/zhangyf/workspace/hadoop-1.0.2/build.xml
+
+clean-contrib:
+
+clean:
+
+clean:
+     [echo] contrib: capacity-scheduler
+
+clean:
+     [echo] contrib: datajoin
+
+clean:
+     [echo] contrib: eclipse-plugin
+
+clean:
+     [echo] contrib: failmon
+
+clean:
+     [echo] contrib: fairscheduler
+
+check-libhdfs-fuse:
+
+clean:
+
+clean:
+     [echo] contrib: gridmix
+Trying to override old definition of task macro_tar
+
+clean:
+     [echo] contrib: hdfsproxy
+
+clean:
+     [echo] contrib: hod
+
+clean:
+     [echo] contrib: index
+
+clean:
+     [echo] contrib: streaming
+
+clean:
+     [echo] contrib: thriftfs
+
+clean:
+     [echo] contrib: vaidya
+
+clean-sign:
+
+clean-fi:
+
+clean:
+   [delete] Deleting directory /home/zhangyf/workspace/hadoop-1.0.2/build
+
+clover.setup:
+
+clover.info:
+     [echo] 
+     [echo]      Clover not found. Code coverage reports disabled.
+     [echo]   
+
+clover:
+
+ivy-download:
+      [get] Getting: http://repo1.maven.org/maven2/org/apache/ivy/ivy/2.1.0/ivy-2.1.0.jar
+      [get] To: /home/zhangyf/workspace/hadoop-1.0.2/ivy/ivy-2.1.0.jar
+      [get] Not modified - so not downloaded
+
+ivy-init-dirs:
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/ivy
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/ivy/lib
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/ivy/report
+
+ivy-probe-antlib:
+
+ivy-init-antlib:
+
+ivy-init:
+[ivy:configure] :: Ivy 2.1.0 - 20090925235825 :: http://ant.apache.org/ivy/ ::
+[ivy:configure] :: loading settings :: file = /home/zhangyf/workspace/hadoop-1.0.2/ivy/ivysettings.xml
+
+ivy-resolve-common:
+[ivy:resolve] :: resolving dependencies :: org.apache.hadoop#Hadoop;working@zhangyf-workstation
+[ivy:resolve] 	confs: [common]
+[ivy:resolve] 	found commons-logging#commons-logging;1.0.4 in maven2
+[ivy:resolve] 	found log4j#log4j;1.2.15 in maven2
+[ivy:resolve] 	found commons-httpclient#commons-httpclient;3.0.1 in maven2
+[ivy:resolve] 	found commons-codec#commons-codec;1.4 in maven2
+[ivy:resolve] 	found commons-cli#commons-cli;1.2 in maven2
+[ivy:resolve] 	found xmlenc#xmlenc;0.52 in maven2
+[ivy:resolve] 	found commons-daemon#commons-daemon;1.0.1 in maven2
+[ivy:resolve] 	found net.java.dev.jets3t#jets3t;0.6.1 in maven2
+[ivy:resolve] 	found commons-net#commons-net;1.4.1 in maven2
+[ivy:resolve] 	found oro#oro;2.0.8 in maven2
+[ivy:resolve] 	found org.mortbay.jetty#jetty;6.1.26 in maven2
+[ivy:resolve] 	found org.mortbay.jetty#jetty-util;6.1.26 in maven2
+[ivy:resolve] 	found org.mortbay.jetty#servlet-api;2.5-20081211 in maven2
+[ivy:resolve] 	found asm#asm;3.2 in maven2
+[ivy:resolve] 	found com.sun.jersey#jersey-core;1.8 in maven2
+[ivy:resolve] 	found com.sun.jersey#jersey-json;1.8 in maven2
+[ivy:resolve] 	found com.sun.jersey#jersey-server;1.8 in maven2
+[ivy:resolve] 	found tomcat#jasper-runtime;5.5.12 in maven2
+[ivy:resolve] 	found tomcat#jasper-compiler;5.5.12 in maven2
+[ivy:resolve] 	found commons-el#commons-el;1.0 in maven2
+[ivy:resolve] 	found commons-configuration#commons-configuration;1.6 in maven2
+[ivy:resolve] 	found commons-collections#commons-collections;3.2.1 in maven2
+[ivy:resolve] 	found commons-lang#commons-lang;2.4 in maven2
+[ivy:resolve] 	found commons-logging#commons-logging;1.1.1 in maven2
+[ivy:resolve] 	found commons-digester#commons-digester;1.8 in maven2
+[ivy:resolve] 	found commons-beanutils#commons-beanutils;1.7.0 in maven2
+[ivy:resolve] 	found commons-beanutils#commons-beanutils-core;1.8.0 in maven2
+[ivy:resolve] 	found org.apache.commons#commons-math;2.1 in maven2
+[ivy:resolve] 	found junit#junit;4.5 in maven2
+[ivy:resolve] 	found commons-logging#commons-logging-api;1.0.4 in maven2
+[ivy:resolve] 	found org.slf4j#slf4j-api;1.4.3 in maven2
+[ivy:resolve] 	found org.eclipse.jdt#core;3.1.1 in maven2
+[ivy:resolve] 	found org.slf4j#slf4j-log4j12;1.4.3 in maven2
+[ivy:resolve] 	found org.codehaus.jackson#jackson-mapper-asl;1.8.8 in maven2
+[ivy:resolve] 	found org.codehaus.jackson#jackson-core-asl;1.8.8 in maven2
+[ivy:resolve] 	found org.mockito#mockito-all;1.8.5 in maven2
+[ivy:resolve] 	found com.jcraft#jsch;0.1.42 in maven2
+[ivy:resolve] 	found org.aspectj#aspectjrt;1.6.5 in maven2
+[ivy:resolve] 	found org.aspectj#aspectjtools;1.6.5 in maven2
+[ivy:resolve] 	found org.vafer#jdeb;0.8 in maven2
+[ivy:resolve] :: resolution report :: resolve 904ms :: artifacts dl 18ms
+[ivy:resolve] 	:: evicted modules:
+[ivy:resolve] 	commons-logging#commons-logging;1.0.4 by [commons-logging#commons-logging;1.1.1] in [common]
+[ivy:resolve] 	commons-logging#commons-logging;1.0.3 by [commons-logging#commons-logging;1.1.1] in [common]
+[ivy:resolve] 	commons-logging#commons-logging;1.1 by [commons-logging#commons-logging;1.1.1] in [common]
+	---------------------------------------------------------------------
+	|                  |            modules            ||   artifacts   |
+	|       conf       | number| search|dwnlded|evicted|| number|dwnlded|
+	---------------------------------------------------------------------
+	|      common      |   42  |   0   |   0   |   3   ||   39  |   0   |
+	---------------------------------------------------------------------
+
+ivy-retrieve-common:
+[ivy:retrieve] :: retrieving :: org.apache.hadoop#Hadoop
+[ivy:retrieve] 	confs: [common]
+[ivy:retrieve] 	39 artifacts copied, 0 already retrieved (21627kB/38ms)
+[ivy:cachepath] DEPRECATED: 'ivy.conf.file' is deprecated, use 'ivy.settings.file' instead
+[ivy:cachepath] :: loading settings :: file = /home/zhangyf/workspace/hadoop-1.0.2/ivy/ivysettings.xml
+
+init:
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/classes
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/tools
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/src
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/webapps/task/WEB-INF
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/webapps/job/WEB-INF
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/webapps/history/WEB-INF
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/webapps/hdfs/WEB-INF
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/webapps/datanode/WEB-INF
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/webapps/secondary/WEB-INF
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/examples
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/ant
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/c++
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/test
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/test/classes
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/test/testjar
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/test/testshell
+    [mkdir] Created dir: /home/zhangyf/workspace/hadoop-1.0.2/build/test/extraconf
+    [touch] Creating /tmp/null1796688197
+   [delete] Deleting: /tmp/null1796688197
+     [copy] Copying 8 files to /home/zhangyf/workspace/hadoop-1.0.2/build/webapps
+
+record-parser:
+
+compile-rcc-compiler:
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/build.xml:462: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 29 source files to /home/zhangyf/workspace/hadoop-1.0.2/build/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 1.6
+    [javac] 1 warning
+
+compile-core-classes:
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/build.xml:486: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 436 source files to /home/zhangyf/workspace/hadoop-1.0.2/build/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 1.6
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/KerberosName.java:29: warning: Config is internal proprietary API and may be removed in a future release
+    [javac] import sun.security.krb5.Config;
+    [javac]                         ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/KerberosName.java:30: warning: KrbException is internal proprietary API and may be removed in a future release
+    [javac] import sun.security.krb5.KrbException;
+    [javac]                         ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:43: warning: ResolverConfiguration is internal proprietary API and may be removed in a future release
+    [javac] import sun.net.dns.ResolverConfiguration;
+    [javac]                   ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:44: warning: IPAddressUtil is internal proprietary API and may be removed in a future release
+    [javac] import sun.net.util.IPAddressUtil;
+    [javac]                    ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:45: warning: Krb5Util is internal proprietary API and may be removed in a future release
+    [javac] import sun.security.jgss.krb5.Krb5Util;
+    [javac]                              ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:46: warning: Credentials is internal proprietary API and may be removed in a future release
+    [javac] import sun.security.krb5.Credentials;
+    [javac]                         ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:47: warning: PrincipalName is internal proprietary API and may be removed in a future release
+    [javac] import sun.security.krb5.PrincipalName;
+    [javac]                         ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java:21: warning: GSSUtil is internal proprietary API and may be removed in a future release
+    [javac] import sun.security.jgss.GSSUtil;
+    [javac]                         ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/KerberosName.java:76: warning: Config is internal proprietary API and may be removed in a future release
+    [javac]   private static Config kerbConf;
+    [javac]                  ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/KerberosName.java:80: warning: Config is internal proprietary API and may be removed in a future release
+    [javac]       kerbConf = Config.getInstance();
+    [javac]                  ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/KerberosName.java:82: warning: KrbException is internal proprietary API and may be removed in a future release
+    [javac]     } catch (KrbException ke) {
+    [javac]              ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:131: warning: Credentials is internal proprietary API and may be removed in a future release
+    [javac]     Credentials serviceCred = null;
+    [javac]     ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:133: warning: PrincipalName is internal proprietary API and may be removed in a future release
+    [javac]       PrincipalName principal = new PrincipalName(serviceName,
+    [javac]       ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:133: warning: PrincipalName is internal proprietary API and may be removed in a future release
+    [javac]       PrincipalName principal = new PrincipalName(serviceName,
+    [javac]                                     ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:134: warning: PrincipalName is internal proprietary API and may be removed in a future release
+    [javac]           PrincipalName.KRB_NT_SRV_HST);
+    [javac]           ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:136: warning: Krb5Util is internal proprietary API and may be removed in a future release
+    [javac]           .toString(), Krb5Util.ticketToCreds(getTgtFromSubject()));
+    [javac]                        ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:135: warning: Credentials is internal proprietary API and may be removed in a future release
+    [javac]       serviceCred = Credentials.acquireServiceCreds(principal
+    [javac]                     ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:145: warning: Krb5Util is internal proprietary API and may be removed in a future release
+    [javac]         .add(Krb5Util.credsToTicket(serviceCred));
+    [javac]              ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:402: warning: ResolverConfiguration is internal proprietary API and may be removed in a future release
+    [javac]         ResolverConfiguration.open().searchlist();
+    [javac]         ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:419: warning: IPAddressUtil is internal proprietary API and may be removed in a future release
+    [javac]       if (IPAddressUtil.isIPv4LiteralAddress(host)) {
+    [javac]           ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:421: warning: IPAddressUtil is internal proprietary API and may be removed in a future release
+    [javac]         byte[] ip = IPAddressUtil.textToNumericFormatV4(host);
+    [javac]                     ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:423: warning: IPAddressUtil is internal proprietary API and may be removed in a future release
+    [javac]       } else if (IPAddressUtil.isIPv6LiteralAddress(host)) {
+    [javac]                  ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/SecurityUtil.java:425: warning: IPAddressUtil is internal proprietary API and may be removed in a future release
+    [javac]         byte[] ip = IPAddressUtil.textToNumericFormatV6(host);
+    [javac]                     ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java:199: warning: GSSUtil is internal proprietary API and may be removed in a future release
+    [javac]                                                         GSSUtil.NT_GSS_KRB5_PRINCIPAL);
+    [javac]                                                         ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java:200: warning: GSSUtil is internal proprietary API and may be removed in a future release
+    [javac]             gssContext = gssManager.createContext(serviceName, GSSUtil.GSS_KRB5_MECH_OID, null,
+    [javac]                                                                ^
+    [javac] Note: Some input files use or override a deprecated API.
+    [javac] Note: Recompile with -Xlint:deprecation for details.
+    [javac] 26 warnings
+    [javac] Creating empty /home/zhangyf/workspace/hadoop-1.0.2/build/classes/org/apache/hadoop/jmx/package-info.class
+     [copy] Copying 1 file to /home/zhangyf/workspace/hadoop-1.0.2/build/classes
+
+compile-hdfs-classes:
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/build.xml:575: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 189 source files to /home/zhangyf/workspace/hadoop-1.0.2/build/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 1.6
+    [javac] Note: Some input files use or override a deprecated API.
+    [javac] Note: Recompile with -Xlint:deprecation for details.
+    [javac] 1 warning
+     [copy] Copying 1 file to /home/zhangyf/workspace/hadoop-1.0.2/build/classes
+
+compile-mapred-classes:
+Trying to override old definition of task jsp-compile
+     [copy] Copying 23 files to /home/zhangyf/workspace/hadoop-1.0.2/build/webapps/job
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/build.xml:539: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 415 source files to /home/zhangyf/workspace/hadoop-1.0.2/build/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 1.6
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/ReduceTask.java:108: error: duplicate class: org.apache.hadoop.mapred.ReduceTask
+    [javac] class ReduceTask extends Task {
+    [javac] ^
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:1127: warning: [unchecked] unchecked cast
+    [javac] 	      comparator2 = (RawComparator<SOURCEKEY>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
+    [javac] 	                                                                    ^
+    [javac]   required: RawComparator<SOURCEKEY>
+    [javac]   found:    WritableComparator
+    [javac]   where SOURCEKEY is a type-variable:
+    [javac]     SOURCEKEY extends Object declared in class IncrementalSourceValuesIterator
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:1697: warning: [unchecked] unchecked conversion
+    [javac]           this.real = job.getOutputFormat().getRecordWriter(fs, job, finalName,
+    [javac]                                                            ^
+    [javac]   required: RecordWriter<K,V>
+    [javac]   found:    RecordWriter
+    [javac]   where K,V are type-variables:
+    [javac]     K extends Object declared in class ReduceTask.OldTrackingRecordWriter
+    [javac]     V extends Object declared in class ReduceTask.OldTrackingRecordWriter
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:1708: warning: [unchecked] unchecked conversion
+    [javac]         this.real = job.getOutputFormat().getRecordWriter(localfs, job, finalName, reporter);
+    [javac]                                                          ^
+    [javac]   required: RecordWriter<K,V>
+    [javac]   found:    RecordWriter
+    [javac]   where K,V are type-variables:
+    [javac]     K extends Object declared in class ReduceTask.OldTrackingRecordWriter
+    [javac]     V extends Object declared in class ReduceTask.OldTrackingRecordWriter
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:1759: warning: [unchecked] unchecked cast
+    [javac] 	      keyclass = (Class<K>)job.getOutputKeyClass();
+    [javac] 	                                                ^
+    [javac]   required: Class<K>
+    [javac]   found:    Class<CAP#1>
+    [javac]   where K is a type-variable:
+    [javac]     K extends Object declared in class ReduceTask.OldTrackingIFileRecordWriter
+    [javac]   where CAP#1 is a fresh type-variable:
+    [javac]     CAP#1 extends Object from capture of ?
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:1760: warning: [unchecked] unchecked cast
+    [javac] 	      valclass = (Class<V>)job.getOutputValueClass();
+    [javac] 	                                                  ^
+    [javac]   required: Class<V>
+    [javac]   found:    Class<CAP#1>
+    [javac]   where V is a type-variable:
+    [javac]     V extends Object declared in class ReduceTask.OldTrackingIFileRecordWriter
+    [javac]   where CAP#1 is a fresh type-variable:
+    [javac]     CAP#1 extends Object from capture of ?
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:1861: warning: [unchecked] unchecked conversion
+    [javac] 		  comparator = conf.getOutputKeyComparator();
+    [javac] 		                                          ^
+    [javac]   required: RawComparator<OUTKEY>
+    [javac]   found:    RawComparator
+    [javac]   where OUTKEY is a type-variable:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.FilterOutputLocalCollector
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:1863: warning: [unchecked] unchecked conversion
+    [javac] 		  reducer = ReflectionUtils.newInstance(conf.getIterativeReducerClass(), conf);
+    [javac] 		                                       ^
+    [javac]   required: IterativeReducer<INKEY,INVALUE,OUTKEY,OUTVALUE>
+    [javac]   found:    CAP#1
+    [javac]   where INKEY,INVALUE,OUTKEY,OUTVALUE are type-variables:
+    [javac]     INKEY extends Object declared in class ReduceTask.FilterOutputLocalCollector
+    [javac]     INVALUE extends Object declared in class ReduceTask.FilterOutputLocalCollector
+    [javac]     OUTKEY extends Object declared in class ReduceTask.FilterOutputLocalCollector
+    [javac]     OUTVALUE extends Writable declared in class ReduceTask.FilterOutputLocalCollector
+    [javac]   where CAP#1 is a fresh type-variable:
+    [javac]     CAP#1 extends IterativeReducer from capture of ? extends IterativeReducer
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2009: warning: [unchecked] unchecked conversion
+    [javac] 		  reducer = ReflectionUtils.newInstance(conf.getIterativeReducerClass(), conf);
+    [javac] 		                                       ^
+    [javac]   required: IterativeReducer<INKEY,INVALUE,OUTKEY,OUTVALUE>
+    [javac]   found:    CAP#1
+    [javac]   where INKEY,INVALUE,OUTKEY,OUTVALUE are type-variables:
+    [javac]     INKEY extends Object declared in class ReduceTask.TerminateChecker
+    [javac]     INVALUE extends Object declared in class ReduceTask.TerminateChecker
+    [javac]     OUTKEY extends Object declared in class ReduceTask.TerminateChecker
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.TerminateChecker
+    [javac]   where CAP#1 is a fresh type-variable:
+    [javac]     CAP#1 extends IterativeReducer from capture of ? extends IterativeReducer
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2036: warning: [unchecked] unchecked conversion
+    [javac] 		  return conf.getResultInputFormat().getRecordReader(inputSplit, conf, reporter);
+    [javac] 		                                                    ^
+    [javac]   required: RecordReader<OUTKEY,OUTVALUE>
+    [javac]   found:    RecordReader
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.TerminateChecker
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.TerminateChecker
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2095: warning: [unchecked] unchecked conversion
+    [javac] 		  comparator = conf.getOutputKeyComparator();
+    [javac] 		                                          ^
+    [javac]   required: RawComparator<OUTKEY>
+    [javac]   found:    RawComparator
+    [javac]   where OUTKEY is a type-variable:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFileQueue
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2180: warning: [unchecked] unchecked call to ReduceTask.ResultFile(RecordReader<OUTKEY,OUTVALUE>,int) as a member of the raw type ReduceTask.ResultFile
+    [javac] 		  put(new ResultFile(getOldPrevResultReader(conf, reporter), 0));
+    [javac] 		      ^
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFile
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFile
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2180: warning: [unchecked] unchecked conversion
+    [javac] 		  put(new ResultFile(getOldPrevResultReader(conf, reporter), 0));
+    [javac] 		      ^
+    [javac]   required: ReduceTask.ResultFile<OUTKEY,OUTVALUE>
+    [javac]   found:    ReduceTask.ResultFile
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFileQueue
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFileQueue
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2182: warning: [unchecked] unchecked call to ReduceTask.ResultFile(RecordReader<OUTKEY,OUTVALUE>,int) as a member of the raw type ReduceTask.ResultFile
+    [javac] 			  put(new ResultFile(getIncrementalPrevResultReader(conf, i, reporter), i));
+    [javac] 			      ^
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFile
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFile
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2182: warning: [unchecked] unchecked conversion
+    [javac] 			  put(new ResultFile(getIncrementalPrevResultReader(conf, i, reporter), i));
+    [javac] 			      ^
+    [javac]   required: ReduceTask.ResultFile<OUTKEY,OUTVALUE>
+    [javac]   found:    ReduceTask.ResultFile
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFileQueue
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFileQueue
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2195: warning: [unchecked] unchecked call to ReduceTask.ResultFile(RecordReader<OUTKEY,OUTVALUE>,int) as a member of the raw type ReduceTask.ResultFile
+    [javac] 			  put(new ResultFile(getOldPrevResultReader(conf, reporter), 0));
+    [javac] 			      ^
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFile
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFile
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2195: warning: [unchecked] unchecked conversion
+    [javac] 			  put(new ResultFile(getOldPrevResultReader(conf, reporter), 0));
+    [javac] 			      ^
+    [javac]   required: ReduceTask.ResultFile<OUTKEY,OUTVALUE>
+    [javac]   found:    ReduceTask.ResultFile
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFileQueue
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFileQueue
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2197: warning: [unchecked] unchecked call to ReduceTask.ResultFile(RecordReader<OUTKEY,OUTVALUE>,int) as a member of the raw type ReduceTask.ResultFile
+    [javac] 			  put(new ResultFile(getIncrementalPrevResultReader(conf, (currentIteration-1), reporter), 0));
+    [javac] 			      ^
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFile
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFile
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2197: warning: [unchecked] unchecked conversion
+    [javac] 			  put(new ResultFile(getIncrementalPrevResultReader(conf, (currentIteration-1), reporter), 0));
+    [javac] 			      ^
+    [javac]   required: ReduceTask.ResultFile<OUTKEY,OUTVALUE>
+    [javac]   found:    ReduceTask.ResultFile
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFileQueue
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFileQueue
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2219: warning: [unchecked] unchecked conversion
+    [javac] 				return conf.getResultInputFormat().getRecordReader(inputSplit, conf, reporter);
+    [javac] 				                                                  ^
+    [javac]   required: RecordReader<OUTKEY,OUTVALUE>
+    [javac]   found:    RecordReader
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFileQueue
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFileQueue
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2245: warning: [unchecked] unchecked conversion
+    [javac] 			return conf.getResultInputFormat().getRecordReader(inputSplit, conf, reporter);
+    [javac] 			                                                  ^
+    [javac]   required: RecordReader<OUTKEY,OUTVALUE>
+    [javac]   found:    RecordReader
+    [javac]   where OUTKEY,OUTVALUE are type-variables:
+    [javac]     OUTKEY extends Object declared in class ReduceTask.ResultFileQueue
+    [javac]     OUTVALUE extends Object declared in class ReduceTask.ResultFileQueue
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2566: warning: [unchecked] unchecked conversion
+    [javac] 	  RecordReader<OUTKEY, OUTVAL> resultReader = job.getResultInputFormat().getRecordReader(inputSplit, job, reporter);
+    [javac] 	                                                                                        ^
+    [javac]   required: RecordReader<OUTKEY,OUTVAL>
+    [javac]   found:    RecordReader
+    [javac]   where OUTKEY,OUTVAL are type-variables:
+    [javac]     OUTKEY extends Writable declared in method <OUTKEY,OUTVAL>sendGlobalData(JobConf,String,Task.TaskReporter)
+    [javac]     OUTVAL extends GlobalRecordable declared in method <OUTKEY,OUTVAL>sendGlobalData(JobConf,String,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/ReduceTask.java:2857: warning: [unchecked] unchecked cast
+    [javac]           .getRecordWriter(taskContext);
+    [javac]                           ^
+    [javac]   required: RecordWriter<K,V>
+    [javac]   found:    RecordWriter<CAP#1,CAP#2>
+    [javac]   where K,V are type-variables:
+    [javac]     K extends Object declared in class ReduceTask.NewTrackingRecordWriter
+    [javac]     V extends Object declared in class ReduceTask.NewTrackingRecordWriter
+    [javac]   where CAP#1,CAP#2 are fresh type-variables:
+    [javac]     CAP#1 extends Object from capture of ?
+    [javac]     CAP#2 extends Object from capture of ?
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask.java:251: warning: [unchecked] unchecked conversion
+    [javac]       rawIn = job.getInputFormat().getRecordReader(split, job, reporter);
+    [javac]                                                   ^
+    [javac]   required: RecordReader<K,V>
+    [javac]   found:    RecordReader
+    [javac]   where K,V are type-variables:
+    [javac]     K extends Object declared in class MapTask.TrackedRecordReader
+    [javac]     V extends Object declared in class MapTask.TrackedRecordReader
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask.java:1389: warning: [unchecked] unchecked conversion
+    [javac] 			staticReader = new IterationTrackedRecordReader<SK, SV>(inputSplit, job, reporter, job.getStaticInputFormat());
+    [javac] 			                                                                                                           ^
+    [javac]   required: InputFormat<SK,SV>
+    [javac]   found:    InputFormat
+    [javac]   where SK,SV are type-variables:
+    [javac]     SK extends Object declared in method <SK,SV>getStaticReader(JobConf,Task.TaskReporter)
+    [javac]     SV extends Object declared in method <SK,SV>getStaticReader(JobConf,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask.java:1419: warning: [unchecked] unchecked conversion
+    [javac] 			staticReader = new IterationTrackedRecordReader<SK, SV>(inputSplit, job, reporter, job.getStaticInputFormat());
+    [javac] 			                                                                                                           ^
+    [javac]   required: InputFormat<SK,SV>
+    [javac]   found:    InputFormat
+    [javac]   where SK,SV are type-variables:
+    [javac]     SK extends Object declared in method <SK,SV>getUpdatedStaticReader(JobConf,Task.TaskReporter)
+    [javac]     SV extends Object declared in method <SK,SV>getUpdatedStaticReader(JobConf,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask.java:1517: warning: [unchecked] unchecked conversion
+    [javac] 				dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
+    [javac] 				                                                                                                             ^
+    [javac]   required: InputFormat<DK,DV>
+    [javac]   found:    InputFormat
+    [javac]   where DK,DV are type-variables:
+    [javac]     DK extends Object declared in method <DK,DV>getDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac]     DV extends Object declared in method <DK,DV>getDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask.java:1551: warning: [unchecked] unchecked conversion
+    [javac] 			dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
+    [javac] 			                                                                                                             ^
+    [javac]   required: InputFormat<DK,DV>
+    [javac]   found:    InputFormat
+    [javac]   where DK,DV are type-variables:
+    [javac]     DK extends Object declared in method <DK,DV>getFilterDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac]     DV extends Object declared in method <DK,DV>getFilterDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask.java:1655: warning: [unchecked] unchecked conversion
+    [javac]       this.real = inputFormat.createRecordReader(split, taskContext);
+    [javac]                                                 ^
+    [javac]   required: RecordReader<K,V>
+    [javac]   found:    RecordReader
+    [javac]   where K,V are type-variables:
+    [javac]     K extends Object declared in class NewTrackingRecordReader
+    [javac]     V extends Object declared in class NewTrackingRecordReader
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask.java:3857: warning: [unchecked] unchecked cast
+    [javac]       	        (RawComparator<SK>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
+    [javac]       	                                                 ^
+    [javac]   required: RawComparator<SK>
+    [javac]   found:    WritableComparator
+    [javac]   where SK is a type-variable:
+    [javac]     SK extends Object declared in class MapTask.MapOutputBufferwSource
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask_backup.java:199: warning: [unchecked] unchecked conversion
+    [javac]       rawIn = job.getInputFormat().getRecordReader(split, job, reporter);
+    [javac]                                                   ^
+    [javac]   required: RecordReader<K,V>
+    [javac]   found:    RecordReader
+    [javac]   where K,V are type-variables:
+    [javac]     K extends Object declared in class MapTask_backup.TrackedRecordReader
+    [javac]     V extends Object declared in class MapTask_backup.TrackedRecordReader
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask_backup.java:1310: warning: [unchecked] unchecked conversion
+    [javac] 			staticReader = new IterationTrackedRecordReader<SK, SV>(inputSplit, job, reporter, job.getStaticInputFormat());
+    [javac] 			                                                                                                           ^
+    [javac]   required: InputFormat<SK,SV>
+    [javac]   found:    InputFormat
+    [javac]   where SK,SV are type-variables:
+    [javac]     SK extends Object declared in method <SK,SV>getStaticReader(JobConf,Task.TaskReporter)
+    [javac]     SV extends Object declared in method <SK,SV>getStaticReader(JobConf,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask_backup.java:1340: warning: [unchecked] unchecked conversion
+    [javac] 			staticReader = new IterationTrackedRecordReader<SK, SV>(inputSplit, job, reporter, job.getStaticInputFormat());
+    [javac] 			                                                                                                           ^
+    [javac]   required: InputFormat<SK,SV>
+    [javac]   found:    InputFormat
+    [javac]   where SK,SV are type-variables:
+    [javac]     SK extends Object declared in method <SK,SV>getUpdatedStaticReader(JobConf,Task.TaskReporter)
+    [javac]     SV extends Object declared in method <SK,SV>getUpdatedStaticReader(JobConf,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask_backup.java:1438: warning: [unchecked] unchecked conversion
+    [javac] 				dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
+    [javac] 				                                                                                                             ^
+    [javac]   required: InputFormat<DK,DV>
+    [javac]   found:    InputFormat
+    [javac]   where DK,DV are type-variables:
+    [javac]     DK extends Object declared in method <DK,DV>getDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac]     DV extends Object declared in method <DK,DV>getDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask_backup.java:1473: warning: [unchecked] unchecked conversion
+    [javac] 			dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
+    [javac] 			                                                                                                             ^
+    [javac]   required: InputFormat<DK,DV>
+    [javac]   found:    InputFormat
+    [javac]   where DK,DV are type-variables:
+    [javac]     DK extends Object declared in method <DK,DV>getFilterDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac]     DV extends Object declared in method <DK,DV>getFilterDynamicReader(JobConf,int,Task.TaskReporter)
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask_backup.java:1577: warning: [unchecked] unchecked conversion
+    [javac]       this.real = inputFormat.createRecordReader(split, taskContext);
+    [javac]                                                 ^
+    [javac]   required: RecordReader<K,V>
+    [javac]   found:    RecordReader
+    [javac]   where K,V are type-variables:
+    [javac]     K extends Object declared in class NewTrackingRecordReader
+    [javac]     V extends Object declared in class NewTrackingRecordReader
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/MapTask_backup.java:3779: warning: [unchecked] unchecked cast
+    [javac]       	        (RawComparator<SK>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
+    [javac]       	                                                 ^
+    [javac]   required: RawComparator<SK>
+    [javac]   found:    WritableComparator
+    [javac]   where SK is a type-variable:
+    [javac]     SK extends Object declared in class MapTask_backup.MapOutputBufferwSource
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/lib/IdentityIterativeMapper.java:17: warning: [unchecked] unchecked cast
+    [javac] 		output.collect((K2)statickey, (V2)dynamicvalue);
+    [javac] 		                   ^
+    [javac]   required: K2
+    [javac]   found:    SK
+    [javac]   where SK,K2 are type-variables:
+    [javac]     SK extends Object declared in class IdentityIterativeMapper
+    [javac]     K2 extends Object declared in class IdentityIterativeMapper
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/lib/IdentityIterativeMapper.java:17: warning: [unchecked] unchecked cast
+    [javac] 		output.collect((K2)statickey, (V2)dynamicvalue);
+    [javac] 		                                  ^
+    [javac]   required: V2
+    [javac]   found:    DV
+    [javac]   where DV,V2 are type-variables:
+    [javac]     DV extends Object declared in class IdentityIterativeMapper
+    [javac]     V2 extends Object declared in class IdentityIterativeMapper
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/lib/IdentityProjector.java:18: warning: [unchecked] unchecked cast
+    [javac] 		return (DK)statickey;
+    [javac] 		           ^
+    [javac]   required: DK
+    [javac]   found:    SK
+    [javac]   where SK,DK are type-variables:
+    [javac]     SK extends WritableComparable declared in class IdentityProjector
+    [javac]     DK extends WritableComparable declared in class IdentityProjector
+    [javac] /home/zhangyf/workspace/hadoop-1.0.2/src/mapred/org/apache/hadoop/mapred/lib/StaticDataPartitioner.java:20: warning: [unchecked] unchecked conversion
+    [javac] 		projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
+    [javac] 		                                       ^
+    [javac]   required: Projector<SK,DK,DV>
+    [javac]   found:    CAP#1
+    [javac]   where SK,DK,DV are type-variables:
+    [javac]     SK extends WritableComparable declared in class StaticDataPartitioner
+    [javac]     DK extends WritableComparable declared in class StaticDataPartitioner
+    [javac]     DV extends Object declared in class StaticDataPartitioner
+    [javac]   where CAP#1 is a fresh type-variable:
+    [javac]     CAP#1 extends Projector from capture of ? extends Projector
+    [javac] Note: Some input files use or override a deprecated API.
+    [javac] Note: Recompile with -Xlint:deprecation for details.
+    [javac] 1 error
+    [javac] 41 warnings
