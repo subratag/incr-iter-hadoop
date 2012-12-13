@@ -17,7 +17,6 @@ import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
-import Util.MainDriver;
 
 public class genGraph extends Configured implements Tool {
 
@@ -39,10 +38,10 @@ public class genGraph extends Configured implements Tool {
 	    JobConf job = new JobConf(getConf());
 	    job.setJobName("gengraph " + capacity + ":" + argument);    
 	    
-	    job.setInt(MainDriver.GEN_CAPACITY, capacity);
-	    job.setInt(MainDriver.GEN_ARGUMENT, argument);
-	    job.set(MainDriver.GEN_TYPE, type);
-	    job.set(MainDriver.GEN_OUT, outpath);
+	    job.setInt(Parameters.GEN_CAPACITY, capacity);
+	    job.setInt(Parameters.GEN_ARGUMENT, argument);
+	    job.set(Parameters.GEN_TYPE, type);
+	    job.set(Parameters.GEN_OUT, outpath);
 	    
 	    FileInputFormat.addInputPath(job, new Path(args[0]));
 	    FileOutputFormat.setOutputPath(job, new Path(outpath));

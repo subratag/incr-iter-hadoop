@@ -10,7 +10,7 @@ import java.util.Random;
 import jsc.distributions.Lognormal;
 import jsc.distributions.Normal;
 
-import nmf.IntIntPairWritable;
+//import nmf.IntIntPairWritable;
 
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -25,8 +25,8 @@ import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.examples.incremental.Util;
 
-import Util.MainDriver;
 
 public class genGraphMap extends MapReduceBase implements
 		Mapper<LongWritable, Text, IntWritable, Text> {
@@ -40,9 +40,10 @@ public class genGraphMap extends MapReduceBase implements
 	private BufferedWriter out3;		//iterative state
 	private boolean done = false;
 	private int taskid;
+	private int tasknum;
 	private JobConf conf;
 	private double initial;
-	private IFile.Writer<IntIntPairWritable, FloatWritable> writer;
+	//private IFile.Writer<IntIntPairWritable, FloatWritable> writer;
 	
 	public static final double SP_EDGE_LOGN_MU = 1.5;
 	public static final double SP_EDGE_LOGN_SIGMA = 1.0;
@@ -60,12 +61,12 @@ public class genGraphMap extends MapReduceBase implements
 	
 	@Override
 	public void configure(JobConf job){
-		argument = job.getInt(MainDriver.GEN_ARGUMENT, 0);
-		capacity = job.getInt(MainDriver.GEN_CAPACITY, 0);
+		argument = job.getInt(Parameters.GEN_ARGUMENT, 0);
+		capacity = job.getInt(Parameters.GEN_CAPACITY, 0);
 		initial = (double)capacity / argument;
-		subcapacity = capacity / Util.Util.getTTNum(job);
-		type = job.get(MainDriver.GEN_TYPE);
-		String outdir = job.get(MainDriver.GEN_OUT);
+		subcapacity = capacity / Util.getTTNum(job);
+		type = job.get(Parameters.GEN_TYPE);
+		String outdir = job.get(Parameters.GEN_OUT);
 		try {
 			FileSystem fs = FileSystem.get(job);
 			
@@ -74,20 +75,20 @@ public class genGraphMap extends MapReduceBase implements
 			FSDataOutputStream os3;
 			
 			if(type.equals("nmf")){
-				os = fs.create(new Path(outdir + "/part" + Util.Util.getTaskId(job)));
+				os = fs.create(new Path(outdir + "/part" + Util.getTaskId(job)));
 				out = new BufferedWriter(new OutputStreamWriter(os));
 			}else if(type.equals("power")){
-				os = fs.create(new Path(outdir + "/M/part" + Util.Util.getTaskId(job)));
-				os2 = fs.create(new Path(outdir + "/N/part" + Util.Util.getTaskId(job)));
-				os3 = fs.create(new Path(outdir + "/Niter/subrank" + Util.Util.getTaskId(job)));
+				os = fs.create(new Path(outdir + "/M/part" + Util.getTaskId(job)));
+				os2 = fs.create(new Path(outdir + "/N/part" + Util.getTaskId(job)));
+				os3 = fs.create(new Path(outdir + "/Niter/subrank" + Util.getTaskId(job)));
 				out = new BufferedWriter(new OutputStreamWriter(os));
 				out2 = new BufferedWriter(new OutputStreamWriter(os2));
-				writer = new IFile.Writer<IntIntPairWritable, FloatWritable>(job, os3, 
-						IntIntPairWritable.class, FloatWritable.class, null, null);
+				//writer = new IFile.Writer<IntIntPairWritable, FloatWritable>(job, os3, 
+						//IntIntPairWritable.class, FloatWritable.class, null, null);
 			}else{
-				os = fs.create(new Path(outdir + "/normalstatic/part" + Util.Util.getTaskId(job)));
-				os2 = fs.create(new Path(outdir + "/iterativestatic/part" + Util.Util.getTaskId(job)));
-				os3 = fs.create(new Path(outdir + "/iterativestate/part" + Util.Util.getTaskId(job)));
+				os = fs.create(new Path(outdir + "/normalstatic/part" + Util.getTaskId(job)));
+				os2 = fs.create(new Path(outdir + "/iterativestatic/part" + Util.getTaskId(job)));
+				os3 = fs.create(new Path(outdir + "/iterativestate/part" + Util.getTaskId(job)));
 				out = new BufferedWriter(new OutputStreamWriter(os));
 				out2 = new BufferedWriter(new OutputStreamWriter(os2));
 				out3 = new BufferedWriter(new OutputStreamWriter(os3));
@@ -99,7 +100,8 @@ public class genGraphMap extends MapReduceBase implements
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		taskid = Util.Util.getTaskId(job);
+		taskid = Util.getTaskId(job);
+		tasknum = Util.getTTNum(job);
 		conf = job;
 	}
 	
@@ -170,6 +172,16 @@ public class genGraphMap extends MapReduceBase implements
 				Lognormal logn = new Lognormal(PG_EDGE_LOGN_MU, PG_EDGE_LOGN_SIGMA);
 
 				int base = subcapacity * taskid;
+				
+				//determine the most number of links one node could have
+				int avgcapacity = capacity / tasknum;
+				int mostnum;
+				if(tasknum > 8){
+					mostnum = avgcapacity * 8;
+				}else{
+					mostnum = capacity;
+				}
+				
 				for(int i=0; i<subcapacity; i++){
 					reporter.setStatus(String.valueOf(i));
 					int index = base + i;
@@ -178,7 +190,7 @@ public class genGraphMap extends MapReduceBase implements
 
 					int num_link = (int)Math.round(rand);
 					
-					while(num_link > capacity / 2){
+					while(num_link > mostnum){
 						rand = logn.random();
 						num_link = (int)Math.round(rand);
 					}
@@ -225,7 +237,7 @@ public class genGraphMap extends MapReduceBase implements
 				}
 			}else if(type.equals("km")){
 				int nummeans = 0;
-				int k = argument / Util.Util.getTTNum(conf);
+				int k = argument / Util.getTTNum(conf);
 				Random r = new Random();
 				Normal normal = new Normal(KM_NORMAL_M, KM_NORMAL_D);
 				
@@ -301,7 +313,7 @@ public class genGraphMap extends MapReduceBase implements
 						float val = rand.nextFloat();
 						out.write(i + "," + j + "\t" + val + "\n");
 						out2.write(i + "," + j + "\t" + val + "\n");
-						writer.append(new IntIntPairWritable(i,j), new FloatWritable(val));
+						//writer.append(new IntIntPairWritable(i,j), new FloatWritable(val));
 					}
 					
 					out.flush();
@@ -313,7 +325,7 @@ public class genGraphMap extends MapReduceBase implements
 			out.close();
 			if(out2 != null) out2.close();
 			if(out3 != null) out3.close();
-			if(writer != null) writer.close();
+			//if(writer != null) writer.close();
 			done = true;
 		}
 	}
