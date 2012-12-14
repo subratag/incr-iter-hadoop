@@ -196,6 +196,7 @@ public class genGraphMap extends MapReduceBase implements
 					}
 					if(num_link <= 0) num_link = 1;
 			
+					/*
 					if(index < argument){
 						out.write(String.valueOf(index)+"\t" + initial + ":");
 					}else{
@@ -204,6 +205,8 @@ public class genGraphMap extends MapReduceBase implements
 					
 					out2.write(String.valueOf(index)+"\t");
 					out3.write(String.valueOf(index)+"\t1\n");
+					
+
 					
 					//System.out.println(prob);
 					Random r = new Random();
@@ -231,6 +234,27 @@ public class genGraphMap extends MapReduceBase implements
 					}
 					out.write("\n");		
 					out2.write("\n");	
+					*/
+					
+					Random r = new Random();
+					ArrayList<Integer> links = new ArrayList<Integer>(num_link);
+					for(int j=0; j< num_link; j++){
+						int link = r.nextInt(capacity);
+						
+						int trys = 0;
+						while(links.contains(link)  && trys < 10){
+							link = r.nextInt(capacity);
+							trys++;
+						}
+						if(trys == 10) continue;
+						links.add(link);
+
+						//System.out.println(weight);
+						out.write(index + "\t" + String.valueOf(link) + "\n");
+						out2.write(index + "\t" + String.valueOf(link) + "\n");
+						
+					}
+					
 					out.flush();
 					out2.flush();
 					out3.flush();
