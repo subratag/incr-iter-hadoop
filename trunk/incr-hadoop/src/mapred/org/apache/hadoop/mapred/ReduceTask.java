@@ -3320,6 +3320,11 @@ class ReduceTask extends Task {
       public URL getOutputLocation() {
         return taskOutput;
       }
+      
+      @Override
+      public String toString(){
+    	  return taskAttemptId + "\t" + ttHost + "\t" + taskOutput;
+      }
     }
     
     /** Describes the output of a map; could either be on disk or in-memory. */
@@ -3951,6 +3956,8 @@ class ReduceTask extends Task {
         if (!createdNow) {
           // Reconnect
           try {
+        	  LOG.info("connect " + connection + " map location: " + mapOutputLoc + 
+        			  " mapoutputlength " + mapOutputLength + " compressedLength " + compressedLength);
             connection = mapOutputLoc.getOutputLocation().openConnection();
             input = setupSecureConnection(mapOutputLoc, connection);
           } catch (IOException ioe) {
@@ -3984,6 +3991,7 @@ class ReduceTask extends Task {
         
         int bytesRead = 0;
         try {
+        	LOG.info("read shuffle data " + shuffleData.length);
           int n = input.read(shuffleData, 0, shuffleData.length);
           while (n > 0) {
             bytesRead += n;
