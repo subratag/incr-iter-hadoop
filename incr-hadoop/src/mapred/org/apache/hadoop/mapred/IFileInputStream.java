@@ -25,6 +25,7 @@ import java.io.InputStream;
 import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.util.DataChecksum;
+import org.mortbay.log.Log;
 /**
  * A checksum input stream, used for IFiles.
  * Used to validate the checksum of files created by {@link IFileOutputStream}. 
@@ -160,6 +161,12 @@ class IFileInputStream extends InputStream {
       // The last four bytes are checksum. Strip them and verify
       csum = new byte[checksumSize];
       IOUtils.readFully(in, csum, 0, checksumSize);
+      
+      Log.info("header: " + sum.getHeader() + "\ttype:" + sum.getChecksumType() + 
+    		  						"\tsize: " + sum.getChecksumSize() +
+    		  							"\tvalue: "+ sum.getValue() + 
+    		  							"\t" + csum.toString() + "\tsize: " + checksumSize);
+      
       if (!sum.compare(csum, 0)) {
         throw new ChecksumException("Checksum Error", 0);
       }
