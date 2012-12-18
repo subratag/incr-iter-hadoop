@@ -4469,6 +4469,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 			}
 			
 			completeReduceTasks.get(jobid).get(iteration).add(new IntWritable(taskid));
+
+		}else{
+			//for reset the index info, for map
+			indexCache.removeMap(attemptID.toString());
 		}
 
 		
