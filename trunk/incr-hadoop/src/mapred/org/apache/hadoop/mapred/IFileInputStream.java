@@ -143,6 +143,7 @@ class IFileInputStream extends InputStream {
     
     // If we are trying to read past the end of data, just read
     // the left over data
+	  Log.info("currentOffset: " + currentOffset + "\tdataLength: " + dataLength + "\tlen: " + len);
     if (currentOffset + len > dataLength) {
       len = (int) dataLength - (int)currentOffset;
     }
@@ -152,6 +153,8 @@ class IFileInputStream extends InputStream {
     if (bytesRead < 0) {
       throw new ChecksumException("Checksum Error", 0);
     }
+    
+    Log.info("\tvalue: "+ sum.getValue() + "\tbytes read: " + bytesRead);
     
     sum.update(b,off,bytesRead);
 

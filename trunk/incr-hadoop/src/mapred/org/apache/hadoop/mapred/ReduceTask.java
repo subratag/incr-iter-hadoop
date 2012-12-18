@@ -3606,6 +3606,7 @@ class ReduceTask extends Task {
        */
       @Override
       public void run() {
+    	  int i = 1;
         while (true) {        
           try {
             MapOutputLocation loc = null;
@@ -3620,6 +3621,8 @@ class ReduceTask extends Task {
             CopyOutputErrorType error = CopyOutputErrorType.OTHER_ERROR;
             readError = false;
             try {
+            	LOG.info("creating shuffle client ");
+            	shuffleClientMetrics = createShuffleClientInstrumentation();
               shuffleClientMetrics.threadBusy();
               start(loc);
               size = copyOutput(loc);
@@ -3628,7 +3631,7 @@ class ReduceTask extends Task {
             } catch (IOException e) {
               LOG.warn(reduceTask.getTaskID() + " copy failed: " +
                        loc.getTaskAttemptId() + " from " + loc.getHost());
-              LOG.warn(StringUtils.stringifyException(e));
+              LOG.warn("lalalala " + StringUtils.stringifyException(e));
               shuffleClientMetrics.failedFetch();
               if (readError) {
                 error = CopyOutputErrorType.READ_ERROR;
@@ -3991,7 +3994,7 @@ class ReduceTask extends Task {
         
         int bytesRead = 0;
         try {
-        	LOG.info("read shuffle data " + shuffleData.length);
+        	LOG.info("read shuffle data " + shuffleData.length + "\t" + mapOutputLength);
           int n = input.read(shuffleData, 0, shuffleData.length);
           while (n > 0) {
             bytesRead += n;
@@ -4302,6 +4305,7 @@ class ReduceTask extends Task {
       
       // start all the copying threads
       for (int i=0; i < numCopiers; i++) {
+    	  LOG.info("create copiers " + numCopiers);
         MapOutputCopier copier = new MapOutputCopier(conf, reporter, 
             reduceTask.getJobTokenSecret());
         copiers.add(copier);

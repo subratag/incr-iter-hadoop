@@ -136,6 +136,8 @@ class IndexCache {
       totalMemoryUsed.addAndGet(-info.getSize());
       if (!queue.remove(mapId)) {
         LOG.warn("Map ID" + mapId + " not found in queue!!");
+      }else{
+    	  LOG.info("remove map output index " + mapId);
       }
     } else {
       LOG.info("Map ID " + mapId + " not found in cache");

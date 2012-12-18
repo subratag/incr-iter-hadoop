@@ -2548,6 +2548,8 @@ class MapTask extends Task {
       kvbuffer = null;
       mergeParts();
       Path outputPath = mapOutputFile.getOutputFile();
+      LOG.info("map output file length: " + rfs.getFileStatus(outputPath).getLen());
+      
       fileOutputByteCounter.increment(rfs.getFileStatus(outputPath).getLen());
     }
 
@@ -2840,6 +2842,7 @@ class MapTask extends Task {
         filename[i] = mapOutputFile.getSpillFile(i);
         finalOutFileSize += rfs.getFileStatus(filename[i]).getLen();
       }
+ 
       if (numSpills == 1) { //the spill is the final output
         rfs.rename(filename[0],
             new Path(filename[0].getParent(), "file.out"));
@@ -2946,6 +2949,7 @@ class MapTask extends Task {
         }
         spillRec.writeToFile(finalIndexFile, job);
         finalOut.close();
+        LOG.info("map output size: " + finalOut.size());
         for(int i = 0; i < numSpills; i++) {
           rfs.delete(filename[i],true);
         }
@@ -3465,6 +3469,7 @@ class MapTask extends Task {
       kvbuffer = null;
       mergeParts();
       Path outputPath = mapOutputFile.getOutputFile();
+      LOG.info("map output file length: " + rfs.getFileStatus(outputPath).getLen());
       fileOutputByteCounter.increment(rfs.getFileStatus(outputPath).getLen());
     }
 
@@ -3781,12 +3786,15 @@ class MapTask extends Task {
         finalOutFileSize += rfs.getFileStatus(filename[i]).getLen();
       }
       if (numSpills == 1) { //the spill is the final output
+    	  LOG.info("creating file file.out; indexCacheList size " + indexCacheList.size());
         rfs.rename(filename[0],
             new Path(filename[0].getParent(), "file.out"));
         if (indexCacheList.size() == 0) {
+        	LOG.info("rename file file.out.index");
           rfs.rename(mapOutputFile.getSpillIndexFile(0),
               new Path(filename[0].getParent(),"file.out.index"));
         } else {
+        	LOG.info("writeToFile file file.out.index");
           indexCacheList.get(0).writeToFile(
                 new Path(filename[0].getParent(),"file.out.index"), job);
         }
@@ -3889,6 +3897,7 @@ class MapTask extends Task {
         }
         spillRec.writeToFile(finalIndexFile, job);
         finalOut.close();
+        LOG.info("map output size: " + finalOut.size());
         for(int i = 0; i < numSpills; i++) {
           rfs.delete(filename[i],true);
         }
