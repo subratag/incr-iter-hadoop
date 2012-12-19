@@ -143,7 +143,7 @@ class IFileInputStream extends InputStream {
     
     // If we are trying to read past the end of data, just read
     // the left over data
-	  Log.info("currentOffset: " + currentOffset + "\tdataLength: " + dataLength + "\tlen: " + len);
+	  //Log.info("currentOffset: " + currentOffset + "\tdataLength: " + dataLength + "\tlen: " + len);
     if (currentOffset + len > dataLength) {
       len = (int) dataLength - (int)currentOffset;
     }
@@ -154,7 +154,7 @@ class IFileInputStream extends InputStream {
       throw new ChecksumException("Checksum Error", 0);
     }
     
-    Log.info("\tvalue: "+ sum.getValue() + "\tbytes read: " + bytesRead);
+    //Log.info("\tvalue: "+ sum.getValue() + "\tbytes read: " + bytesRead);
     
     sum.update(b,off,bytesRead);
 
@@ -164,11 +164,6 @@ class IFileInputStream extends InputStream {
       // The last four bytes are checksum. Strip them and verify
       csum = new byte[checksumSize];
       IOUtils.readFully(in, csum, 0, checksumSize);
-      
-      Log.info("header: " + sum.getHeader() + "\ttype:" + sum.getChecksumType() + 
-    		  						"\tsize: " + sum.getChecksumSize() +
-    		  							"\tvalue: "+ sum.getValue() + 
-    		  							"\t" + csum.toString() + "\tsize: " + checksumSize);
       
       if (!sum.compare(csum, 0)) {
         throw new ChecksumException("Checksum Error", 0);

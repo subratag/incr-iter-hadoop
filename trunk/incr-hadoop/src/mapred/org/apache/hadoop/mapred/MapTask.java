@@ -3786,15 +3786,12 @@ class MapTask extends Task {
         finalOutFileSize += rfs.getFileStatus(filename[i]).getLen();
       }
       if (numSpills == 1) { //the spill is the final output
-    	  LOG.info("creating file file.out; indexCacheList size " + indexCacheList.size());
         rfs.rename(filename[0],
             new Path(filename[0].getParent(), "file.out"));
         if (indexCacheList.size() == 0) {
-        	LOG.info("rename file file.out.index");
           rfs.rename(mapOutputFile.getSpillIndexFile(0),
               new Path(filename[0].getParent(),"file.out.index"));
         } else {
-        	LOG.info("writeToFile file file.out.index");
           indexCacheList.get(0).writeToFile(
                 new Path(filename[0].getParent(),"file.out.index"), job);
         }
