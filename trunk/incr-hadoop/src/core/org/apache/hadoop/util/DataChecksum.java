@@ -23,6 +23,8 @@ import java.util.zip.CRC32;
 
 import java.io.*;
 
+import org.mortbay.log.Log;
+
 /**
  * This class provides inteface and utilities for processing checksums for
  * DFS data transfers.
@@ -173,6 +175,7 @@ public class DataChecksum implements Checksum {
                       ( (buf[offset+1] & 0xff) << 16 ) |
                       ( (buf[offset+2] & 0xff) << 8 )  |
                       ( (buf[offset+3] & 0xff) );
+       //Log.info("checksum: " + checksum + "\tsummer.value: " + (int)summer.getValue());
        return checksum == (int) summer.getValue();
      }
      return size == 0;
