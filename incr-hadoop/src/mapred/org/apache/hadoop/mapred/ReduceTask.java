@@ -1122,7 +1122,7 @@ class ReduceTask extends Task {
 	      }else if(job.isIncrementalIterative()){
 	    	  newPreservePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + job.getIterationNum() + "-" + taskid);
 	      }
-     
+                                                                                                                                              
 	      preserveWriter = new IFile.TrippleWriter<KEY, VALUE, SOURCEKEY>(job, localfs, newPreservePath, 
 	    		  keyClass, valClass, skeyClass, null, null);
 	      
@@ -1607,7 +1607,12 @@ class ReduceTask extends Task {
 		try{
 	    	while(true){
 	    		iteration++;
+	    		
 	    		LOG.info("start iteration " + iteration);
+	    	    copyPhase = getProgress().addPhase("copy");
+	    	    sortPhase  = getProgress().addPhase("sort");
+	    	    reducePhase = getProgress().addPhase("reduce");
+	    	    
 		        if (!isLocal) {
 		            reduceCopier = new ReduceCopier(umbilical, job, reporter);
 		            if (!reduceCopier.fetchOutputs()) {
@@ -2738,15 +2743,15 @@ class ReduceTask extends Task {
     if(job.getOutputKeyClass().equals(GlobalUniqKeyWritable.class)) writeHDFS = false;
     
 	//result is dump to local fs, reduce output is localkvstate, create local state data files on local fs
-	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + job.getIterationNum() + "." + this.getTaskID().getTaskID().getId());
+	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + iteration + "." + this.getTaskID().getTaskID().getId());
     final RecordWriter<OUTKEY, OUTVALUE> localOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
             reduceOutputCounter, job, reporter, localfilename, false);
 
-	String filteredfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/filter-" + job.getIterationNum() + "." + this.getTaskID().getTaskID().getId());
+	String filteredfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/filter-" + iteration + "." + this.getTaskID().getTaskID().getId());
     final RecordWriter<OUTKEY, OUTVALUE> filteredOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
             reduceOutputCounter, job, reporter, filteredfilename, false);
     
-    ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE> resultSet = new ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE>(conf.getIterationNum(), reporter);
+    ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE> resultSet = new ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE>(iteration, reporter);
     FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> collector = new FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(
     			localOut, filteredOut, reporter, resultSet);
     
@@ -2793,7 +2798,7 @@ class ReduceTask extends Task {
       if(writeHDFS){
     	  FileSystem hdfs = FileSystem.get(job);
     	  hdfs.copyFromLocalFile(false, new Path(localfilename), 
-    			  new Path(job.get("mapred.output.dir") + "/" + getOutputName(getPartition())));
+    			  new Path(job.get("mapred.output.dir") + "/iteration-" + iteration + "/substate-" + getPartition()));
       }
 
       //if global data, need to send to jobtracker, then the jobtracker will combine them
@@ -2823,7 +2828,7 @@ class ReduceTask extends Task {
     event.setProcessedRecords(reduceInputKeyCounter.getCounter());
     event.setRunTime(taskend - taskstart);
     int nonconvitems = ((FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>)collector).getNonConvergedItems();
-    LOG.info("iteration " + job.getIterationNum() + " non converged items number is " + nonconvitems);
+    LOG.info("iteration " + iteration + " non converged items number is " + nonconvitems);
     event.setSubDistance(nonconvitems);
     
 	try {
@@ -3994,13 +3999,13 @@ class ReduceTask extends Task {
         
         int bytesRead = 0;
         try {
-        	LOG.info("read shuffle data " + shuffleData.length + "\t" + mapOutputLength);
+        	//LOG.info("read shuffle data " + shuffleData.length + "\t" + mapOutputLength);
           int n = input.read(shuffleData, 0, shuffleData.length);
           while (n > 0) {
             bytesRead += n;
             shuffleClientMetrics.inputBytes(n);
 
-            LOG.info("read " + bytesRead);
+            //LOG.info("read " + bytesRead);
             // indicate we're making progress
             reporter.progress();
             n = input.read(shuffleData, bytesRead, 
@@ -4305,7 +4310,6 @@ class ReduceTask extends Task {
       
       // start all the copying threads
       for (int i=0; i < numCopiers; i++) {
-    	  LOG.info("create copiers " + numCopiers);
         MapOutputCopier copier = new MapOutputCopier(conf, reporter, 
             reduceTask.getJobTokenSecret());
         copiers.add(copier);
