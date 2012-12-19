@@ -66,6 +66,13 @@ public class IncrPageRank {
 	public static class PageRankReduce extends MapReduceBase implements
 		IterativeReducer<LongWritable, FloatWritable, LongWritable, FloatWritable> {
 	
+		private long starttime;
+		
+		@Override
+		public void configure(JobConf job){
+			starttime = job.getLong("starttime", 0);
+		}
+		
 		@Override
 		public void reduce(LongWritable key, Iterator<FloatWritable> values,
 				OutputCollector<LongWritable, FloatWritable> output, Reporter report)
@@ -81,7 +88,7 @@ public class IncrPageRank {
 			}
 			
 			output.collect(key, new FloatWritable(rank));
-			System.out.println("output\t" + key + "\t" + rank);
+			//System.out.println("output\t" + key + "\t" + rank);
 		}
 		
 		@Override
@@ -96,7 +103,11 @@ public class IncrPageRank {
 			// TODO Auto-generated method stub
 			return new FloatWritable(-1);
 		}
-	
+
+		@Override
+		public void close(){
+			System.out.println("now " + System.currentTimeMillis() + " past " + (System.currentTimeMillis()-starttime));
+		}
 	}
 
 	public static class PageRankProjector implements Projector<LongWritable, LongWritable, FloatWritable> {
@@ -180,7 +191,7 @@ public class IncrPageRank {
 	    incrjob.setOutputValueClass(FloatWritable.class);
 	    
 	    FileInputFormat.addInputPath(incrjob, new Path(deltaStatic));
-	    FileOutputFormat.setOutputPath(incrjob, new Path(output + "/incriter-0"));	//the filtered output dynamic data
+	    FileOutputFormat.setOutputPath(incrjob, new Path(output + "/incrstart"));	//the filtered output dynamic data
 
 	    incrjob.setFilterThreshold((float)filterthreshold);
 
@@ -209,9 +220,10 @@ public class IncrPageRank {
 	    	long iterstart = System.currentTimeMillis();
 	    	
 		    JobConf job = new JobConf(IncrPageRank.class);
-		    jobname = "Incr PageRank Iterative " + iteration;
+		    jobname = "Incr PageRank Iterative Computation " + iterstart;
 		    job.setJobName(jobname);
 	    
+		    job.setLong("starttime", iterstart);
 		    //if(partitions == 0) partitions = Util.getTTNum(job);
 		    
 		    //set for iterative process   
@@ -221,7 +233,7 @@ public class IncrPageRank {
 
 		    job.setStaticDataPath(updateStatic);				//the new static data
 		    job.setPreserveStatePath(preserveState);		// the preserve map/reduce output path
-		    job.setDynamicDataPath(output + "/incriter-" + (iteration-1));				// the dynamic data path
+		    job.setDynamicDataPath(output + "/incriter");				// the dynamic data path
 		    job.setIncrOutputPath(output);
 		    
 		    job.setStaticInputFormat(SequenceFileInputFormat.class);
@@ -235,7 +247,7 @@ public class IncrPageRank {
 		    job.setOutputValueClass(FloatWritable.class);
 		    
 		    FileInputFormat.addInputPath(job, new Path(updateStatic));
-		    FileOutputFormat.setOutputPath(job, new Path(output + "/incriter-" + iteration)); 	//the filtered output dynamic data
+		    FileOutputFormat.setOutputPath(job, new Path(output + "/incriter")); 	//the filtered output dynamic data
 
 		    job.setFilterThreshold((float)filterthreshold);
     

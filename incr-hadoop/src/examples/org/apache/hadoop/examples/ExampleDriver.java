@@ -32,6 +32,7 @@ import org.apache.hadoop.examples.naive.NaiveKmeans;
 import org.apache.hadoop.examples.naive.NaiveMatrixVectorMultiplication;
 import org.apache.hadoop.examples.naive.NaivePageRank;
 import org.apache.hadoop.examples.naive.Test;
+import org.apache.hadoop.examples.naive.genGraph;
 import org.apache.hadoop.examples.terasort.TeraGen;
 import org.apache.hadoop.examples.terasort.TeraSort;
 import org.apache.hadoop.examples.terasort.TeraValidate;
@@ -76,6 +77,7 @@ public class ExampleDriver {
       pgd.addClass("teravalidate", TeraValidate.class, "Checking results of terasort");
       
       //for iterative jobs
+      pgd.addClass("disgengraph", genGraph.class, "disgen");
       pgd.addClass("preprocess", PreProcess.class, "preprocess");
       pgd.addClass("iterpagerank", PageRank.class, "iterative pagerank");
       pgd.addClass("iterkmeans", Kmeans.class, "iterative kmeans");

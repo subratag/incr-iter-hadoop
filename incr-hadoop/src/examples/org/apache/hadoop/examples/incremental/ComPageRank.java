@@ -184,7 +184,7 @@ public class ComPageRank {
 			// TODO Auto-generated method stub
 			return null;
 		}
-	
+
 	}
 	
 	public static class PageRankProjector implements Projector<LongWritable, LongWritable, FloatWritable> {
