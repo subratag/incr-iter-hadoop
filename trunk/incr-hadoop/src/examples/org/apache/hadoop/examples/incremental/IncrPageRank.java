@@ -71,6 +71,7 @@ public class IncrPageRank {
 		@Override
 		public void configure(JobConf job){
 			starttime = job.getLong("starttime", 0);
+			System.out.println("start new");
 		}
 		
 		@Override
@@ -78,14 +79,18 @@ public class IncrPageRank {
 				OutputCollector<LongWritable, FloatWritable> output, Reporter report)
 				throws IOException {
 			float rank = 0;
+			
+			int i = 0;
 			while(values.hasNext()){
 				float v = values.next().get();
 				if(v == -1) continue;	//if the value is equal to the one set by removeLable(), we skip it
 				
 				//System.out.println("reduce on " + key + " with " + v);
-				
+				i++;
 				rank += v;
 			}
+			
+			System.out.println(" key " + key + " with " + i);
 			
 			output.collect(key, new FloatWritable(rank));
 			//System.out.println("output\t" + key + "\t" + rank);

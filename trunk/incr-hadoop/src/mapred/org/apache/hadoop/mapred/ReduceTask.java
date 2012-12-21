@@ -408,13 +408,14 @@ class ReduceTask extends Task {
   extends IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY> {
 	public IncrementalReduceValuesIterator (RawKeyValueSourceIterator in,
 							RawKeyValueSourceIterator preserveIn,
+							int iteration,
 	                         RawComparator<KEY> comparator, 
 	                         Class<KEY> keyClass,
 	                         Class<VALUE> valClass,
 	                         Class<SOURCEKEY> skeyClass, VALUE negativeV,
 	                         Configuration conf, Progressable reporter)
 	throws IOException {
-		super(in, preserveIn, comparator, keyClass, valClass, skeyClass, getTaskID().getTaskID().getId(), negativeV, conf, reporter);
+		super(in, preserveIn, iteration, comparator, keyClass, valClass, skeyClass, getTaskID().getTaskID().getId(), negativeV, conf, reporter);
 	}
 	
 	@Override
@@ -1102,7 +1103,8 @@ class ReduceTask extends Task {
 		private boolean preserveHasNext = true;
 	    
 	    public IncrementalSourceValuesIterator (RawKeyValueSourceIterator in, 
-	    						RawKeyValueSourceIterator preserveIn, 
+	    						RawKeyValueSourceIterator preserveIn,
+	    						int iteration,
 	                           RawComparator<KEY> comparator, 
 	                           Class<KEY> keyClass,
 	                           Class<VALUE> valClass, 
@@ -1120,7 +1122,7 @@ class ReduceTask extends Task {
 	      if(job.isIncrementalStart()){
 	    	  newPreservePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-0-" + taskid);
 	      }else if(job.isIncrementalIterative()){
-	    	  newPreservePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + job.getIterationNum() + "-" + taskid);
+	    	  newPreservePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + iteration + "-" + taskid);
 	      }
                                                                                                                                               
 	      preserveWriter = new IFile.TrippleWriter<KEY, VALUE, SOURCEKEY>(job, localfs, newPreservePath, 
@@ -1584,7 +1586,7 @@ class ReduceTask extends Task {
         	if(IsPreserveMore){
         		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
         	}else{
-        		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+        		preserveIter = reduceCopier.createPreserveKVSIterator(job, 0, reporter);	//0 no use
         	}
         	runIncrementalReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
                         keyClass, valueClass, job.getStaticKeyClass());
@@ -1654,7 +1656,7 @@ class ReduceTask extends Task {
 	        	if(IsPreserveMore){
 	        		preserveIter = reduceCopier.createPreserveKVSIterator2(job, reporter);
 	        	}else{
-	        		preserveIter = reduceCopier.createPreserveKVSIterator(job, reporter);
+	        		preserveIter = reduceCopier.createPreserveKVSIterator(job, iteration, reporter);
 	        	}
 	        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, preserveIter, comparator, 
 	                        keyClass, valueClass, job.getStaticKeyClass());
@@ -2647,7 +2649,7 @@ class ReduceTask extends Task {
       }
       
       IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY> values = 
-    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY>(rIter, pIter,
+    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY>(rIter, pIter, 0,
 		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, reducer.removeLable(),
 		          job, reporter);
       values.informReduceProgress();
@@ -2765,14 +2767,13 @@ class ReduceTask extends Task {
       }
       
       IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY> values = 
-    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY>(rIter, pIter,
+    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY>(rIter, pIter, iteration,
 		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, reducer.removeLable(),
 		          job, reporter);
       values.informReduceProgress();
       
       while (values.more()) {
         reduceInputKeyCounter.increment(1);
-        
         reducer.reduce(values.getKey(), values, collector, reporter);
         
         if(incrProcCount) {
@@ -5053,7 +5054,7 @@ class ReduceTask extends Task {
     
     @SuppressWarnings("unchecked")
     private RawKeyValueSourceIterator createPreserveKVSIterator(
-        JobConf job, Reporter reporter) throws IOException {
+        JobConf job, int iteration, Reporter reporter) throws IOException {
 
     	FileSystem fs = FileSystem.getLocal(job);
     	
@@ -5093,7 +5094,6 @@ class ReduceTask extends Task {
       }else if(job.isIncrementalIterative()){
     	  //the preserve file stored in last snapshot
       	  taskid = reduceTask.getTaskID().getTaskID().getId();
-      	  int iteration = job.getIterationNum();
       	  Path remotePreservedStatePath = new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + (iteration-1) + "-" + taskid);
       	  Path localPreservedStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + (iteration-1) + "-" + taskid);
   			
