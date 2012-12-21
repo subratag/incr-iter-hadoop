@@ -216,56 +216,54 @@ public class IncrPageRank {
 	    
 	    long itertime = 0;
 	    
-	   // while(cont && iteration <=totaliter){
-	    	long iterstart = System.currentTimeMillis();
-	    	
-		    JobConf job = new JobConf(IncrPageRank.class);
-		    jobname = "Incr PageRank Iterative Computation " + iterstart;
-		    job.setJobName(jobname);
-	    
-		    job.setLong("starttime", iterstart);
-		    //if(partitions == 0) partitions = Util.getTTNum(job);
-		    
-		    //set for iterative process   
-		    job.setIncrementalIterative(true);
-		    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-		    job.setIterationNum(iteration);					//iteration number
-
-		    job.setStaticDataPath(updateStatic);				//the new static data
-		    job.setPreserveStatePath(preserveState);		// the preserve map/reduce output path
-		    job.setDynamicDataPath(output + "/incriter");				// the dynamic data path
-		    job.setIncrOutputPath(output);
-		    
-		    job.setStaticInputFormat(SequenceFileInputFormat.class);
-		    job.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
-	    	job.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
-		    job.setOutputFormat(SequenceFileOutputFormat.class);
-		    
-		    job.setStaticKeyClass(LongWritable.class);
-		    job.setStaticValueClass(Text.class);
-		    job.setOutputKeyClass(LongWritable.class);
-		    job.setOutputValueClass(FloatWritable.class);
-		    
-		    FileInputFormat.addInputPath(job, new Path(updateStatic));
-		    FileOutputFormat.setOutputPath(job, new Path(output + "/incriter")); 	//the filtered output dynamic data
-
-		    job.setFilterThreshold((float)filterthreshold);
+    	long iterstart = System.currentTimeMillis();
+    	
+	    JobConf job = new JobConf(IncrPageRank.class);
+	    jobname = "Incr PageRank Iterative Computation " + iterstart;
+	    job.setJobName(jobname);
     
-		    job.setIterativeMapperClass(PageRankMap.class);	
-		    job.setIterativeReducerClass(PageRankReduce.class);
-		    job.setProjectorClass(PageRankProjector.class);
-		    
-		    job.setNumMapTasks(partitions);
-		    job.setNumReduceTasks(partitions);			
+	    job.setLong("starttime", iterstart);
+	    //if(partitions == 0) partitions = Util.getTTNum(job);
+	    
+	    //set for iterative process   
+	    job.setIncrementalIterative(true);
+	    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
+	    job.setMaxIterations(totaliter);					//max number of iterations
 
-		    cont = JobClient.runIterativeJob(job);
+	    job.setStaticDataPath(updateStatic);				//the new static data
+	    job.setPreserveStatePath(preserveState);		// the preserve map/reduce output path
+	    job.setDynamicDataPath(output + "/incriter");				// the dynamic data path
+	    job.setIncrOutputPath(output);
+	    
+	    job.setStaticInputFormat(SequenceFileInputFormat.class);
+	    job.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
+    	job.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
+	    job.setOutputFormat(SequenceFileOutputFormat.class);
+	    
+	    job.setStaticKeyClass(LongWritable.class);
+	    job.setStaticValueClass(Text.class);
+	    job.setOutputKeyClass(LongWritable.class);
+	    job.setOutputValueClass(FloatWritable.class);
+	    
+	    FileInputFormat.addInputPath(job, new Path(updateStatic));
+	    FileOutputFormat.setOutputPath(job, new Path(output + "/incriter")); 	//the filtered output dynamic data
 
-	    	long iterend = System.currentTimeMillis();
-	    	itertime += (iterend - iterstart) / 1000;
-	    	Util.writeLog("incr.pagerank.log", "iteration computation " + iteration + " takes " + itertime + " s");
-	    	
-	    	iteration++;
-	    //}
+	    job.setFilterThreshold((float)filterthreshold);
+
+	    job.setIterativeMapperClass(PageRankMap.class);	
+	    job.setIterativeReducerClass(PageRankReduce.class);
+	    job.setProjectorClass(PageRankProjector.class);
+	    
+	    job.setNumMapTasks(partitions);
+	    job.setNumReduceTasks(partitions);			
+
+	    cont = JobClient.runIterativeJob(job);
+
+    	long iterend = System.currentTimeMillis();
+    	itertime += (iterend - iterstart) / 1000;
+    	Util.writeLog("incr.pagerank.log", "iteration computation " + iteration + " takes " + itertime + " s");
+    	
+    	iteration++;
 	    
 	    return 0;
 	}
