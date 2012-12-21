@@ -577,6 +577,7 @@ abstract public class Task implements Writable, Configurable {
       this.taskProgress = taskProgress;
       this.jvmContext = jvmContext;
     }
+    
     // getters and setters for flag
     void setProgressFlag() {
       progressFlag.set(true);
