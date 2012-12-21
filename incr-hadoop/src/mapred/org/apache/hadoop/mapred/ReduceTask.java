@@ -1604,10 +1604,9 @@ class ReduceTask extends Task {
 		mapchecker.start();
     	
 		int iteration = 0;
+		int maxiteration = job.getMaxIterations();
 		try{
-	    	while(true){
-	    		iteration++;
-	    		
+	    	while(++iteration <= maxiteration){
 	    		LOG.info("start iteration " + iteration);
 	    	    copyPhase = getProgress().addPhase("copy");
 	    	    sortPhase  = getProgress().addPhase("sort");

@@ -546,12 +546,14 @@ class MapTask extends Task {
     		rof.start();
     		
     		try{
+    			int maxiteration = job.getMaxIterations();
     			while(true){
         			synchronized(this){
             			iteration++;
             			LOG.info("start iteration " + iteration);
             			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
         				try {
+        					if(iteration >= maxiteration) break;
         					LOG.info("start waiting... ");
         					this.wait();
         					LOG.info("notify signal recieved... ");

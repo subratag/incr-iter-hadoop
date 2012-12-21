@@ -490,11 +490,11 @@ public class JobConf extends Configuration {
 	}
 	
 	// Yanfeng: set the number of iteration rounds
-	public void setNumIterations(int num) {
+	public void setMaxIterations(int num) {
 		set("mapred.iterative.terminate.iteartions", Integer.toString(num));
 	}
 
-	public int getNumIterations() {
+	public int getMaxIterations() {
 		return getInt("mapred.iterative.terminate.iteartions", 0);
 	}
 	/*
