@@ -476,16 +476,18 @@ public class IFile {
    */
   public static class PreserveFile<T1 extends Object, T2 extends Object, T3 extends Object> {
     private static final int DEFAULT_BUFFER_SIZE = 128*1024;
+    private static final int MAX_VINT_SIZE = 3*9;
     private static final int INDEX_ENTRY_SIZE = 8;
 
     // Count records read from disk
     private long numRecordsRead = 0;
 
     RandomAccessFile dataFile;
+    RandomAccessFile appendFile;
     FSDataInputStream indexIns;
     FSDataOutputStream indexOut;
     
-    long bytesRead = 0;
+    long readbytes = 0;
     final long fileLength;
     boolean eof = false;
     boolean indexend = false;
@@ -520,6 +522,7 @@ public class IFile {
     				Class<T1> t1Class, Class<T2> t2Class, Class<T3> t3Class) throws IOException {
       FileSystem fs = FileSystem.getLocal(conf);
       this.dataFile = new RandomAccessFile(datafile.toString(), "rw");
+      this.appendFile = new RandomAccessFile(datafile.toString() + "-append.tmp", "rw");
 
       this.t1Class = t1Class;
       this.t2Class = t2Class;
@@ -532,19 +535,24 @@ public class IFile {
       this.t3Serializer = serializationFactory.getSerializer(t3Class);
       this.t3Serializer.open(buffer);
       
+      
       indexOut = fs.create(newindexfile);
       this.fileLength = fs.getFileStatus(datafile).getLen();
       
       if (conf != null) {
         bufferSize = conf.getInt("io.file.buffer.size", DEFAULT_BUFFER_SIZE);
+    	//bufferSize = DEFAULT_BUFFER_SIZE;
       }
       
       databuffer = new byte[bufferSize];
       dataIn.reset(databuffer, 0, 0);
       
+      int total = 0;
       //incrmental start, no oldindexfile
       if(oldindexfile != null){
     	  indexIns = fs.open(oldindexfile);
+    	  
+    	  total = indexIns.readInt();
     	  
           indexbuffer = new byte[indexbufferSize];
           indexIn.reset(indexbuffer, 0, 0);
@@ -561,11 +569,14 @@ public class IFile {
           	int offset = indexIn.readInt();
           	
           	indexCache.put(hashcode, offset);
+          	//Log.info("put " + hashcode + "\t" + offset);
           } 
           
           indexIn.close();
           indexbuffer = null;
       }
+      
+      Log.info("load index file " + indexCache.size() + " entries! expected entries " + total);
     }
 
     public void close() throws IOException {
@@ -581,9 +592,20 @@ public class IFile {
       t2Serializer.close();
       t3Serializer.close();
 
+      //append the appendfile to the datafile, merge two files as one file
+      appendFile.seek(0);
+      dataFile.seek(dataFile.length());
+      int len;
+      byte[] buf = new byte[128 * 1024];
+      while ((len = appendFile.read(buf)) > 0){
+    	  dataFile.write(buf, 0, len);
+      }
+      
       // Close the underlying stream iff we own it...
       dataFile.close();
       dataFile = null;
+      appendFile.close();
+      appendFile = null;
       
   	  //write the hashcodes length
   	  indexOut.writeInt(indexCache.size());
@@ -613,7 +635,7 @@ public class IFile {
         return keyhash;
     }
     
-    public void update(int keyhash, boolean newkey, T1 t1, T2 t2, T3 t3) throws IOException {
+    public void append(T1 t1, T2 t2, T3 t3) throws IOException {
         if (t1.getClass() != t1Class)
             throw new IOException("wrong t1 class: "+ t1.getClass()
                                   +" is not "+ t1Class);
@@ -625,14 +647,12 @@ public class IFile {
         throw new IOException("wrong t3 class: "+ t3.getClass()
                               +" is not "+ t3Class);
 
-      //if this is a new key
-      if(newkey){
-    	  indexCache.put(getHashcode(t1), (int)dataFile.length());
-      }
-      //else old key, then update the offset using the old hashcode
-      else{
-    	  indexCache.put(keyhash, (int)dataFile.length());
-      }
+	  if(!t1.equals(cachedKey)){
+		  int hash = getHashcode(t1);
+		  indexCache.put(hash, (int)dataFile.length());
+		  cachedKey = t1;
+		  Log.info("index cache " + t1 + " hashkey " + hash + "\toffset " + dataFile.length());
+	  }
       
       // Append the 'key'
       t1Serializer.serialize(t1);
@@ -681,8 +701,75 @@ public class IFile {
       ++numRecordsWritten;
     }
     
+    public void update(int keyhash, T1 t1, T2 t2, T3 t3) throws IOException {
+        if (t1.getClass() != t1Class)
+            throw new IOException("wrong t1 class: "+ t1.getClass()
+                                  +" is not "+ t1Class);
+        
+      if (t2.getClass() != t2Class)
+        throw new IOException("wrong t2 class: "+ t2.getClass()
+                              +" is not "+ t2Class);
+      if (t3.getClass() != t3Class)
+        throw new IOException("wrong t3 class: "+ t3.getClass()
+                              +" is not "+ t3Class);
+
+      //if not the cached key, that means t1 is a new key, we should update the index cache,
+      //or else, we do nothing
+	  if(!t1.equals(cachedKey)){
+		  indexCache.put(keyhash, (int)(appendFile.length() + dataFile.length()));
+		  cachedKey = t1;
+		  //Log.info("index cache " + t1 + " hashkey " + keyhash + "\toffset " + (appendFile.length() + dataFile.length()));
+	  }
+	  
+      // Append the 'key'
+      t1Serializer.serialize(t1);
+      int t1Length = buffer.getLength();
+      if (t1Length < 0) {
+        throw new IOException("Negative key-length not allowed: " + t1Length + 
+                              " for " + t1);
+      }
+      
+      // Append the 'key'
+      t2Serializer.serialize(t2);
+      int t2Length = buffer.getLength() - t1Length;
+      if (t2Length < 0) {
+        throw new IOException("Negative t2-length not allowed: " + t2Length + 
+                              " for " + t2);
+      }
+
+      // Append the 'value'
+      t3Serializer.serialize(t3);
+      int t3Length = buffer.getLength() - t2Length - t1Length;
+      if (t3Length < 0) {
+        throw new IOException("Negative t3-length not allowed: " + 
+                              t3Length + " for " + t3);
+      }
+      
+      // Write the record out
+      WritableUtils.writeVInt(appendFile, t1Length);                  // key length
+      WritableUtils.writeVInt(appendFile, t2Length);                  // key length
+      WritableUtils.writeVInt(appendFile, t3Length);                // value length
+
+      /********************************
+       * same key length and same value length, need optimize later
+       */
+      
+      //Log.info("key length : " + keyLength + " value length : " + valueLength);
+      appendFile.write(buffer.getData(), 0, buffer.getLength());       // data
+
+      // Reset
+      buffer.reset();
+      
+      // Update bytes written
+      bytesWritten += t1Length + t2Length + t3Length + 
+    		  					  WritableUtils.getVIntSize(t1Length) + 
+                                  WritableUtils.getVIntSize(t2Length) + 
+                                  WritableUtils.getVIntSize(t3Length);
+      ++numRecordsWritten;
+    }
+    
     public long getLength() throws IOException { 
-        return dataFile.length();
+        return appendFile.length();
      }
 
       /**
@@ -717,7 +804,7 @@ public class IFile {
             bytesRead += n;
           }
           return len;
-        }
+      }
       
       int readNextBlock(int minSize) throws IOException {
         int n = rejigData(databuffer, 
@@ -767,16 +854,33 @@ public class IFile {
       }
       
       public boolean seekKey(T1 key, int rehash, IntWritable hashcode) throws IOException{
+    	  if(rehash != 0) Log.info("rehash " + rehash);
+    	  
     	  int keyhash = key.hashCode();
     	  for(int i=0; i<rehash; i++){
     		  keyhash = String.valueOf(keyhash).hashCode();
     	  }
     	  
-      	  if(indexCache.get(keyhash) == null) return false;
-      	
+      	  if(indexCache.get(keyhash) == null){
+      		  Log.info("no hashkey " + keyhash + " for key " + key + " found!");
+      		  return false;
+      	  }
+      	  
       	  dataFile.seek(indexCache.get(keyhash));
-      	  int n = readData(databuffer, 0, bufferSize);
+      	  //Log.info("supposed offset " + indexCache.get(keyhash) + "\toffset prev " + dataFile.getFilePointer());
+      	  //int n = readData(databuffer, 0, bufferSize);
+      	  int n = dataFile.read(databuffer, 0, bufferSize);
       	  dataIn.reset(databuffer, 0, n);
+      	  
+      	  /*
+      	   * for debuging
+      	  String data = new String();
+      	  for(int i=0; i<bufferSize; i++){
+      		  data += databuffer[i] + " ";
+      	  }
+      	  //Log.info(data);
+      	  //Log.info("offset " + dataFile.getFilePointer() + " datain size " + n + "\t" + dataIn.getLength() + "\t" + bufferSize + "\t" + dataIn.getPosition());
+      	  */
       	  
       	  hashcode.set(keyhash);
       	  return true;
@@ -786,13 +890,15 @@ public class IFile {
       throws IOException {
         // Sanity check
         if (eof) {
-          throw new EOFException("Completed reading " + bytesRead);
+          throw new EOFException("Completed reading " + readbytes);
         }
         
+        //Log.info("dataIn pos : " + dataIn.getPosition() + " length : " + dataIn.getLength());
+        
         // Check if we have enough data to read lengths
-        if ((dataIn.getLength() - dataIn.getPosition()) == 0) {
-          int n = readNextBlock(0);
-          return n==0? false : true;
+        if ((dataIn.getLength() - dataIn.getPosition()) < MAX_VINT_SIZE) {
+          int n = readNextBlock(MAX_VINT_SIZE);
+          //Log.info("read data " + n);
         }
         
         // Read key and value lengths
@@ -801,7 +907,9 @@ public class IFile {
         int t2Length = WritableUtils.readVInt(dataIn);
         int t3Length = WritableUtils.readVInt(dataIn);
         int pos = dataIn.getPosition();
-        bytesRead += pos - oldPos;
+        readbytes += pos - oldPos;
+        
+        //Log.info("lengths " + t1Length + "\t" + t2Length + "\t" + t3Length);
         
         // Check for EOF
         if (t1Length == EOF_MARKER && t2Length == EOF_MARKER && t3Length == EOF_MARKER) {
@@ -824,6 +932,8 @@ public class IFile {
         }
         
         final int recordLength = t1Length + t2Length + t3Length;
+        
+        //Log.info("record length " + recordLength);
         
         // Check if we have the raw key/value in the buffer
         if ((dataIn.getLength()-pos) < recordLength) {
@@ -851,7 +961,7 @@ public class IFile {
         }
         
         // Record the bytes read
-        bytesRead += recordLength;
+        readbytes += recordLength;
 
         ++recNo;
         ++numRecordsRead;
