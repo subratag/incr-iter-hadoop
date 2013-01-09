@@ -90,7 +90,7 @@ public class IncrPageRank {
 				rank += v;
 			}
 			
-			System.out.println(" key " + key + " with " + i);
+			//System.out.println(" key " + key + " with " + i);
 			
 			output.collect(key, new FloatWritable(rank));
 			//System.out.println("output\t" + key + "\t" + rank);

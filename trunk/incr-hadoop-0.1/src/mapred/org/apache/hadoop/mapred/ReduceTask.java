@@ -507,7 +507,7 @@ class ReduceTask extends Task {
 	        readNextValue();
 	        readNextSource();
 	        
-	        writer.update(0, true, key, value, skey);
+	        writer.append(key, value, skey);
 	        
 	        //LOG.info(key + "\t" + skey + "\t" + value);
 	        
@@ -961,12 +961,16 @@ class ReduceTask extends Task {
 			  
 			  if(preserveFile.next(keyIn1, valueIn1, skeyIn1)){
 				  //this might be a problem for deserializing
+				  //keyDeserializer1.open(keyIn1);
 				  key1 = keyDeserializer1.deserialize(key1);
-				  source1 = skeyDeserializer1.deserialize(source1);
+				  //valDeserializer1.open(valueIn1);
 				  value1 = valDeserializer1.deserialize(value1);
+				  //skeyDeserializer1.open(skeyIn1);
+				  source1 = skeyDeserializer1.deserialize(source1);
 				  
 				  if(key1.equals(k)){
 					  preserveRecord = new KSVTuple(key1, source1, value1);
+					  //LOG.info("read preserve record: " + preserveRecord);
 					  return preserveRecord;
 				  }else{
 					  return null;
@@ -977,8 +981,8 @@ class ReduceTask extends Task {
 			  }
 		  }
 		  
-		  public void update(int keyhash, boolean newkey, KEY t1, VALUE t2, SOURCEKEY t3) throws IOException{
-			  preserveFile.update(keyhash, newkey, t1, t2, t3);
+		  public void update(int keyhash, KEY t1, VALUE t2, SOURCEKEY t3) throws IOException{
+			  preserveFile.update(keyhash, t1, t2, t3);
 		  }
 	  }
 	  
@@ -1008,20 +1012,22 @@ class ReduceTask extends Task {
 	      this.negativeV = negativeV;
 	      this.in = in;
 	      this.reporter = reporter;
+	      job = (JobConf)conf;
+	      
 	      comparator2 = (RawComparator<SOURCEKEY>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
 
-	      job = (JobConf)conf;
 	      FileSystem hdfs = FileSystem.get(job);
 	      FileSystem localfs = FileSystem.getLocal(job); 
 
+	      IFile.PreserveFile<KEY, VALUE, SOURCEKEY> preserveFile = null;
+	      
 	      if(job.isIncrementalStart()){
 		      Path remotePreservedPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid);
 		      Path remotePreservedIndexPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid + ".index");
 		      Path preservedPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
 		      Path oldPreservedIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid + ".index");
 	    	  Path newPreserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-0-" + taskid + ".index");
-	    	  
-		      IFile.PreserveFile<KEY, VALUE, SOURCEKEY> preserveFile = null;
+
 	      	  if(hdfs.exists(remotePreservedPath)){
 	      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
 	      		  if(!localfs.exists(preservedPath)){
@@ -1043,8 +1049,6 @@ class ReduceTask extends Task {
 		      Path oldPreservedIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + (iteration-1) + "-" + taskid + ".index");
 	    	  Path newPreserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + iteration + "-" + taskid + ".index");
 	    	  
-	    	  IFile.PreserveFile<KEY, VALUE, SOURCEKEY> preserveFile = null;
-	    	  
 	      	  if(hdfs.exists(remotePreservedPath)){
 	      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
 	      		  if(!localfs.exists(preservedPath)){
@@ -1062,6 +1066,7 @@ class ReduceTask extends Task {
 	      }
                            
 	      this.deltaReader = new DeltaFileReader(in, job, keyClass, valClass, skeyClass, negativeV);
+	      wrapPreserveFile = new WrapPreserveFile(job, preserveFile, keyClass, valClass, skeyClass, comparator2);
 	      
 	      currDeltaRecord = deltaReader.nextRecord();
 	      if(currDeltaRecord == null) throw new RuntimeException("no entries in delta file!!!");
@@ -1074,7 +1079,9 @@ class ReduceTask extends Task {
 	      while(currPreserveRecord==null && wrapPreserveFile.seek(currDeltaRecord.key, trial, keyHashBuffer)){
 	    	  trial++;
 	    	  currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
+	    	  LOG.info("record: " + currPreserveRecord);
 	      }
+	      
 	      
 	      if(trial == 0) throw new RuntimeException("no entries in preserve file!!!");
 	      //LOG.info("initial phase:  to match " + currDeltaRecord.key + " is " + currPreserveRecord);
@@ -1118,7 +1125,7 @@ class ReduceTask extends Task {
 			    		  preserveHasNext = false;
 			    	  }
 			    	  
-			    	  wrapPreserveFile.update(keyHashBuffer.get(), false, returnTuple.key, returnTuple.value, returnTuple.source);
+			    	  wrapPreserveFile.update(keyHashBuffer.get(), returnTuple.key, returnTuple.value, returnTuple.source);
 			    	  //LOG.info("deltanull write: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source + "\t" + currPreserveRecord);
 			    	  
 	    		}else if(currPreserveRecord == null){
@@ -1140,7 +1147,7 @@ class ReduceTask extends Task {
 		  	    		currDeltaRecord = null;
 		  	    	  }
 
-		  	    	  wrapPreserveFile.update(0, true, returnTuple.key, returnTuple.value, returnTuple.source);
+		  	    	  wrapPreserveFile.update(keyHashBuffer.get(), returnTuple.key, returnTuple.value, returnTuple.source);
 				      
 				      //LOG.info("extract delta key " + currDeltaRecord.key + "\t" + currDeltaRecord.source + "\t" + currDeltaRecord.value);
 	    		}else if(currDeltaRecord.key.equals(currPreserveRecord.key)){
@@ -1189,7 +1196,7 @@ class ReduceTask extends Task {
 				    		  }
 			  	    	  }
 			  	    	  
-					      wrapPreserveFile.update(keyHashBuffer.get(), false, returnTuple.key, returnTuple.value, returnTuple.source);
+					      wrapPreserveFile.update(keyHashBuffer.get(), returnTuple.key, returnTuple.value, returnTuple.source);
 					      //LOG.info("preserve write1: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 				      }else if(cmpres > 0){
 				    	  //process the preserve file entry
@@ -1201,7 +1208,7 @@ class ReduceTask extends Task {
 				    	  
 				    	  currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
 				    	  
-				    	  wrapPreserveFile.update(keyHashBuffer.get(), false, returnTuple.key, returnTuple.value, returnTuple.source);
+				    	  wrapPreserveFile.update(keyHashBuffer.get(), returnTuple.key, returnTuple.value, returnTuple.source);
 				    	  //LOG.info("preserve write2: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source + "\t" + currPreserveRecord);
 				    	  //LOG.info("process preserve data: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 	
 				      }else{
@@ -1211,7 +1218,7 @@ class ReduceTask extends Task {
 			    		  
 				    	  //if equal, replace the preserver file entry otherwise skip it
 				    	  if(!currDeltaRecord.value.equals(negativeV)){
-				    		  wrapPreserveFile.update(keyHashBuffer.get(), false, returnTuple.key, returnTuple.value, returnTuple.source);
+				    		  wrapPreserveFile.update(keyHashBuffer.get(), returnTuple.key, returnTuple.value, returnTuple.source);
 				  	    	  //LOG.info("replace record: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 
 				  	    	  //LOG.info("preserve write3: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 				    	  }else{
@@ -1280,7 +1287,6 @@ class ReduceTask extends Task {
 
 	    /** Start processing next unique key. */
 	    void nextKey() throws IOException {
-
 	    	/*
 	    	if(!more){
 	    		preserveReader.setNextKey();
