@@ -522,6 +522,11 @@ public class IFile {
     				Class<T1> t1Class, Class<T2> t2Class, Class<T3> t3Class) throws IOException {
       FileSystem fs = FileSystem.getLocal(conf);
       this.dataFile = new RandomAccessFile(datafile.toString(), "rw");
+      File tmpFile = new File(datafile.toString() + "-append.tmp");
+      if(tmpFile.exists()){
+    	  tmpFile.delete();
+    	  Log.info("delete file " + tmpFile);
+      }
       this.appendFile = new RandomAccessFile(datafile.toString() + "-append.tmp", "rw");
 
       this.t1Class = t1Class;
@@ -594,12 +599,18 @@ public class IFile {
 
       //append the appendfile to the datafile, merge two files as one file
       appendFile.seek(0);
-      dataFile.seek(dataFile.length());
+      dataFile.seek(dataFile.length() - 3);
       int len;
       byte[] buf = new byte[128 * 1024];
       while ((len = appendFile.read(buf)) > 0){
     	  dataFile.write(buf, 0, len);
       }
+      
+      WritableUtils.writeVInt(dataFile, EOF_MARKER);
+      WritableUtils.writeVInt(dataFile, EOF_MARKER);
+      WritableUtils.writeVInt(dataFile, EOF_MARKER);
+      
+      Log.info("append " + appendFile.length() + " bytes to the dataFile");
       
       // Close the underlying stream iff we own it...
       dataFile.close();
@@ -716,9 +727,9 @@ public class IFile {
       //if not the cached key, that means t1 is a new key, we should update the index cache,
       //or else, we do nothing
 	  if(!t1.equals(cachedKey)){
-		  indexCache.put(keyhash, (int)(appendFile.length() + dataFile.length()));
+		  indexCache.put(keyhash, (int)(appendFile.length() + dataFile.length() - 3));
 		  cachedKey = t1;
-		  //Log.info("index cache " + t1 + " hashkey " + keyhash + "\toffset " + (appendFile.length() + dataFile.length()));
+		  //Log.info("put index cache " + t1 + " hashkey " + keyhash + "\toffset " + (appendFile.length() + dataFile.length() - 3));
 	  }
 	  
       // Append the 'key'
@@ -862,10 +873,11 @@ public class IFile {
     	  }
     	  
       	  if(indexCache.get(keyhash) == null){
-      		  Log.info("no hashkey " + keyhash + " for key " + key + " found!");
+      		  //Log.info("no hashkey " + keyhash + " for key " + key + " found!");
       		  return false;
       	  }
       	  
+      	  //Log.info("key " + key + " offset " + indexCache.get(keyhash) + " file length " + dataFile.length());
       	  dataFile.seek(indexCache.get(keyhash));
       	  //Log.info("supposed offset " + indexCache.get(keyhash) + "\toffset prev " + dataFile.getFilePointer());
       	  //int n = readData(databuffer, 0, bufferSize);
@@ -889,17 +901,18 @@ public class IFile {
       public boolean next(DataInputBuffer t1, DataInputBuffer t2, DataInputBuffer t3) 
       throws IOException {
         // Sanity check
-        if (eof) {
-          throw new EOFException("Completed reading " + readbytes);
-        }
-        
-        //Log.info("dataIn pos : " + dataIn.getPosition() + " length : " + dataIn.getLength());
-        
+        //if (eof) {
+          //throw new EOFException("Completed reading " + readbytes);
+        //}
+
         // Check if we have enough data to read lengths
         if ((dataIn.getLength() - dataIn.getPosition()) < MAX_VINT_SIZE) {
           int n = readNextBlock(MAX_VINT_SIZE);
           //Log.info("read data " + n);
         }
+        
+        //Log.info("dataIn pos : " + dataIn.getPosition() + " length : " + dataIn.getLength() + 
+        		//" file position: " + dataFile.getFilePointer() + " filelength: " + dataFile.length());
         
         // Read key and value lengths
         int oldPos = dataIn.getPosition();
@@ -913,7 +926,7 @@ public class IFile {
         
         // Check for EOF
         if (t1Length == EOF_MARKER && t2Length == EOF_MARKER && t3Length == EOF_MARKER) {
-          eof = true;
+          //eof = true;
           return false;
         }
         

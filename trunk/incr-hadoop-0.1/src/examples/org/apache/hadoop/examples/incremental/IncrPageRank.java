@@ -71,7 +71,7 @@ public class IncrPageRank {
 		@Override
 		public void configure(JobConf job){
 			starttime = job.getLong("starttime", 0);
-			System.out.println("start new");
+			//System.out.println("start new");
 		}
 		
 		@Override
