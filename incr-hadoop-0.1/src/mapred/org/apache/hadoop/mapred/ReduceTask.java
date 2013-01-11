@@ -976,8 +976,8 @@ class ReduceTask extends Task {
 					  return null;
 				  }
 			  }else{
-				  //will not happen
-				  throw new IOException("this should not happen! the offset is wrong!");
+				  //read the end of the preservefile
+				  return null;
 			  }
 		  }
 		  
@@ -1081,7 +1081,6 @@ class ReduceTask extends Task {
 	    	  currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
 	    	  LOG.info("record: " + currPreserveRecord);
 	      }
-	      
 	      
 	      if(trial == 0) throw new RuntimeException("no entries in preserve file!!!");
 	      //LOG.info("initial phase:  to match " + currDeltaRecord.key + " is " + currPreserveRecord);
