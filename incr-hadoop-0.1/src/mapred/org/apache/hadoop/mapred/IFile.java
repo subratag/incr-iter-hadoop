@@ -474,10 +474,11 @@ public class IFile {
   /**
    * <code>IFile.RandomAccessWriter</code> to write out intermediate map-outputs. 
    */
-  public static class PreserveFile<T1 extends Object, T2 extends Object, T3 extends Object> {
+  public static class PreserveFile<KEY extends Object, VALUE extends Object, SOURCE extends Object> {
     private static final int DEFAULT_BUFFER_SIZE = 128*1024;
     private static final int MAX_VINT_SIZE = 3*9;
     private static final int INDEX_ENTRY_SIZE = 8;
+    private static final int RESULT_KV_LABEL = -100;
 
     // Count records read from disk
     private long numRecordsRead = 0;
@@ -506,20 +507,20 @@ public class IFile {
     
     private TreeMap<Integer, Integer> indexCache = new TreeMap<Integer, Integer>();
 
-    Class<T1> t1Class;
-    Class<T2> t2Class;
-    Class<T3> t3Class;
-    Serializer<T1> t1Serializer;
-    Serializer<T2> t2Serializer;
-    Serializer<T3> t3Serializer;
+    Class<KEY> t1Class;
+    Class<VALUE> t2Class;
+    Class<SOURCE> t3Class;
+    Serializer<KEY> t1Serializer;
+    Serializer<VALUE> t2Serializer;
+    Serializer<SOURCE> t3Serializer;
     
     DataOutputBuffer buffer = new DataOutputBuffer();
     
-    T1 cachedKey;
+    KEY cachedKey;
     int recNo = 1;
 
     public PreserveFile(Configuration conf, Path datafile, Path oldindexfile, Path newindexfile,
-    				Class<T1> t1Class, Class<T2> t2Class, Class<T3> t3Class) throws IOException {
+    				Class<KEY> t1Class, Class<VALUE> t2Class, Class<SOURCE> t3Class) throws IOException {
       FileSystem fs = FileSystem.getLocal(conf);
       this.dataFile = new RandomAccessFile(datafile.toString(), "rw");
       File tmpFile = new File(datafile.toString() + "-append.tmp");
@@ -539,7 +540,6 @@ public class IFile {
       this.t2Serializer.open(buffer);
       this.t3Serializer = serializationFactory.getSerializer(t3Class);
       this.t3Serializer.open(buffer);
-      
       
       indexOut = fs.create(newindexfile);
       this.fileLength = fs.getFileStatus(datafile).getLen();
@@ -635,7 +635,7 @@ public class IFile {
       indexOut = null;
     }
 
-    private int getHashcode(T1 t1){
+    private int getHashcode(KEY t1){
         //if there is a hash conflict, then try next hashcode
         int keyhash = t1.hashCode();
         while(indexCache.containsKey(keyhash)){
@@ -646,7 +646,7 @@ public class IFile {
         return keyhash;
     }
     
-    public void append(T1 t1, T2 t2, T3 t3) throws IOException {
+    public void appendShuffleKVS(KEY t1, VALUE t2, SOURCE t3) throws IOException {
         if (t1.getClass() != t1Class)
             throw new IOException("wrong t1 class: "+ t1.getClass()
                                   +" is not "+ t1Class);
@@ -709,6 +709,58 @@ public class IFile {
     		  					  WritableUtils.getVIntSize(t1Length) + 
                                   WritableUtils.getVIntSize(t2Length) + 
                                   WritableUtils.getVIntSize(t3Length);
+      ++numRecordsWritten;
+    }
+    
+    public void appendResKV(KEY t1, VALUE t2) throws IOException {
+        if (t1.getClass() != t1Class)
+            throw new IOException("wrong t1 class: "+ t1.getClass()
+                                  +" is not "+ t1Class);
+        
+      if (t2.getClass() != t2Class)
+        throw new IOException("wrong t2 class: "+ t2.getClass()
+                              +" is not "+ t2Class);
+
+	  if(!t1.equals(cachedKey)){
+		  throw new IOException(t1 + "is not the key " + cachedKey + " that should be!");
+	  }
+      
+      // Append the 'key'
+      t1Serializer.serialize(t1);
+      int t1Length = buffer.getLength();
+      if (t1Length < 0) {
+        throw new IOException("Negative key-length not allowed: " + t1Length + 
+                              " for " + t1);
+      }
+      
+      // Append the 'rvalue'
+      t2Serializer.serialize(t2);
+      int t2Length = buffer.getLength() - t1Length;
+      if (t2Length < 0) {
+        throw new IOException("Negative t2-length not allowed: " + t2Length + 
+                              " for " + t2);
+      }
+      
+      // Write the record out
+      WritableUtils.writeVInt(dataFile, t1Length);                  // key length
+      WritableUtils.writeVInt(dataFile, t2Length);                  // key length
+      WritableUtils.writeVInt(dataFile, RESULT_KV_LABEL);           // value length
+
+      /********************************
+       * same key length and same value length, need optimize later
+       */
+      
+      //Log.info("key length : " + keyLength + " value length : " + valueLength);
+      dataFile.write(buffer.getData(), 0, buffer.getLength());       // data
+
+      // Reset
+      buffer.reset();
+      
+      // Update bytes written
+      bytesWritten += t1Length + t2Length + 
+    		  					  WritableUtils.getVIntSize(t1Length) + 
+                                  WritableUtils.getVIntSize(t2Length) + 
+                                  WritableUtils.getVIntSize(RESULT_KV_LABEL);
       ++numRecordsWritten;
     }
     
@@ -983,6 +1035,7 @@ public class IFile {
       }
 
   }
+  
   
   /**
    * <code>IFile.Writer</code> to write out intermediate map-outputs. 

@@ -507,7 +507,7 @@ class ReduceTask extends Task {
 	        readNextValue();
 	        readNextSource();
 	        
-	        writer.append(key, value, skey);
+	        writer.appendShuffleKVS(key, value, skey);
 	        
 	        //LOG.info(key + "\t" + skey + "\t" + value);
 	        
@@ -1478,6 +1478,7 @@ class ReduceTask extends Task {
 
     //the common case, for the case that is not incremental iterative app
     if(!job.isIncrementalIterative()){
+    	long time1 = System.currentTimeMillis();
         if (!isLocal) {
             reduceCopier = new ReduceCopier(umbilical, job, reporter);
             if (!reduceCopier.fetchOutputs()) {
@@ -1489,6 +1490,8 @@ class ReduceTask extends Task {
             }
 		}
 		copyPhase.complete();                         // copy is already complete
+		long time2 = System.currentTimeMillis();
+		
 		setPhase(TaskStatus.Phase.SORT);
 		statusUpdate(umbilical);
 		  
@@ -1510,6 +1513,9 @@ class ReduceTask extends Task {
         mapOutputFilesOnDisk.clear();
         
         sortPhase.complete();                         // sort is complete
+        
+        long time3 = System.currentTimeMillis();
+        
         setPhase(TaskStatus.Phase.REDUCE); 
         statusUpdate(umbilical);
         Class keyClass = job.getMapOutputKeyClass();
@@ -1540,6 +1546,11 @@ class ReduceTask extends Task {
           runOldReducer(job, umbilical, reporter, rIter, comparator, 
                         keyClass, valueClass);
         }
+        
+        long time4 = System.currentTimeMillis();
+        
+        LOG.info("job " + job.get("mapred.job.id") + " map task " + this.getTaskID().getTaskID().getId() + " takes copy phase " + (time2-time1) + " ms sort phase " + (time3-time2) + " ms reduce phase " + (time4-time3) + " ms");
+        
     }
     //the special case, for the case that is incremental iterative app, we use a single job
     else{
@@ -1553,6 +1564,8 @@ class ReduceTask extends Task {
 		try{
 	    	while(++iteration <= maxiteration){
 	    		LOG.info("start iteration " + iteration);
+	    		long time1 = System.currentTimeMillis();
+	    		
 	    	    copyPhase = getProgress().addPhase("copy");
 	    	    sortPhase  = getProgress().addPhase("sort");
 	    	    reducePhase = getProgress().addPhase("reduce");
@@ -1568,6 +1581,7 @@ class ReduceTask extends Task {
 		            }
 		        }
 		        copyPhase.complete();                         // copy is already complete
+		        long time2 = System.currentTimeMillis();
 		        setPhase(TaskStatus.Phase.SORT);
 		        statusUpdate(umbilical);
 		          
@@ -1589,6 +1603,9 @@ class ReduceTask extends Task {
 	            mapOutputFilesOnDisk.clear();
 	            
 	            sortPhase.complete();                         // sort is complete
+	            
+	            long time3 = System.currentTimeMillis();
+	            
 	            setPhase(TaskStatus.Phase.REDUCE); 
 	            statusUpdate(umbilical);
 	            Class keyClass = job.getMapOutputKeyClass();
@@ -1606,6 +1623,10 @@ class ReduceTask extends Task {
 	        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, comparator, 
 	                        keyClass, valueClass, job.getStaticKeyClass());
 	        	
+	        	long time4 = System.currentTimeMillis();
+	        	
+	            LOG.info("job " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes copy phase " + (time2-time1) + " ms sort phase " + (time3-time2) + " ms reduce phase " + (time4-time3) + " ms");
+	            
 				synchronized(this){
 					try {
 						LOG.info("start waiting... ");
@@ -1848,36 +1869,6 @@ class ReduceTask extends Task {
 		}
 
 		latestValue = WritableUtils.clone(resultQueue.getValue(), conf);
-		
-		/*
-		//for multiple preserve file
-		//to check whether there are multiple keys from multiple files that can match to the new collected key,
-		//then we will pick the last one
-		int largestPri = resultQueue.getPriority();
-		
-		
-		//LOG.info("key " + lastResultKey + " result pri " + largestPri + " value " + resultQueue.getValue() + "\t" + latestValue);
-
-		while(true){
-			more = resultQueue.next();
-			lastResultKey = resultQueue.getKey();
-			
-			//LOG.info("lastest value " + latestValue + "\t" + resultQueue.getValue());
-			
-			if(!more || comparator.compare(lastResultKey, key)!= 0) break;
-			
-			int tryPriority = resultQueue.getPriority();
-			
-			//LOG.info("key " + lastResultKey + " result pri " + tryPriority + " value " + resultQueue.getValue() + "\t" + latestValue);
-			
-			//LOG.info("for key " + key + " comparing " + tryPriority + " and " + largestPri);
-			
-			if(tryPriority > largestPri){
-				largestPri = tryPriority;
-				latestValue = WritableUtils.clone(resultQueue.getValue(), conf);
-			}
-		}
-		*/
 		
 		float diff = reducer.distance(key, latestValue, value);
 		

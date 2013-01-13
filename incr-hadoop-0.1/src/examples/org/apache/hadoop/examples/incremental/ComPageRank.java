@@ -169,7 +169,7 @@ public class ComPageRank {
 			}
 			
 			output.collect(key, new FloatWritable(rank));
-			System.out.println("output\t" + key + "\t" + rank);
+			//System.out.println("output\t" + key + "\t" + rank);
 		}
 		
 		@Override
