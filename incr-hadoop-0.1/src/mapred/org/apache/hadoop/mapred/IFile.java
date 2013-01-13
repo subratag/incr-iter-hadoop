@@ -57,7 +57,7 @@ import org.mortbay.log.Log;
  * a <code>Reader</code> to read files of this format.
  */
 public class IFile {
-
+	
   private static final int EOF_MARKER = -1;
   
   /**
@@ -950,7 +950,7 @@ public class IFile {
       	  return true;
       }
       
-      public boolean next(DataInputBuffer t1, DataInputBuffer t2, DataInputBuffer t3) 
+      public int next(DataInputBuffer t1, DataInputBuffer t2, DataInputBuffer t3) 
       throws IOException {
         // Sanity check
         //if (eof) {
