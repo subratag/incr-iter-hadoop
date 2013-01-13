@@ -533,6 +533,7 @@ class MapTask extends Task {
     if (useNewApi) {
       runNewMapper(job, splitMetaInfo, umbilical, reporter);
     } else {
+    	long starttime = System.currentTimeMillis();
     	if(job.isIterative()){
     		//normal iterative job, separate state data and static data
     		runIterativeMapper(job, splitMetaInfo, umbilical, reporter);
@@ -551,7 +552,10 @@ class MapTask extends Task {
         			synchronized(this){
             			iteration++;
             			LOG.info("start iteration " + iteration);
+            			long starttime2 = System.currentTimeMillis();
             			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
+            			long endtime2 = System.currentTimeMillis();
+            			LOG.info("map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime2-starttime2) + " ms");
         				try {
         					if(iteration >= maxiteration) break;
         					LOG.info("start waiting... ");
@@ -571,6 +575,8 @@ class MapTask extends Task {
     	}else{
     		runOldMapper(job, splitMetaInfo, umbilical, reporter);
     	}
+    	long endtime = System.currentTimeMillis();
+    	LOG.info("job " + job.get("mapred.job.id") + " map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime-starttime) + " ms");
     }
     done(umbilical, reporter);
   }
