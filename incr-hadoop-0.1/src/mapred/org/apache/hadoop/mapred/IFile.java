@@ -474,12 +474,14 @@ public class IFile {
   /**
    * <code>IFile.RandomAccessWriter</code> to write out intermediate map-outputs. 
    */
-  public static class PreserveFile<KEY extends Object, VALUE extends Object, SOURCE extends Object> {
+  public static class PreserveFile<KEY extends Object, VALUE extends Object, SOURCE extends Object, OUTVALUE extends Object> {
     private static final int DEFAULT_BUFFER_SIZE = 128*1024;
     private static final int MAX_VINT_SIZE = 3*9;
     private static final int INDEX_ENTRY_SIZE = 8;
     private static final int RESULT_KV_LABEL = -100;
 
+    public enum TYPE{FILEEND, RECORDEND, MORE}
+    
     // Count records read from disk
     private long numRecordsRead = 0;
 
@@ -510,9 +512,11 @@ public class IFile {
     Class<KEY> t1Class;
     Class<VALUE> t2Class;
     Class<SOURCE> t3Class;
+    Class<OUTVALUE> t4Class;
     Serializer<KEY> t1Serializer;
     Serializer<VALUE> t2Serializer;
     Serializer<SOURCE> t3Serializer;
+    Serializer<OUTVALUE> t4Serializer;
     
     DataOutputBuffer buffer = new DataOutputBuffer();
     
@@ -520,7 +524,7 @@ public class IFile {
     int recNo = 1;
 
     public PreserveFile(Configuration conf, Path datafile, Path oldindexfile, Path newindexfile,
-    				Class<KEY> t1Class, Class<VALUE> t2Class, Class<SOURCE> t3Class) throws IOException {
+    				Class<KEY> t1Class, Class<VALUE> t2Class, Class<SOURCE> t3Class, Class<OUTVALUE> t4Class) throws IOException {
       FileSystem fs = FileSystem.getLocal(conf);
       this.dataFile = new RandomAccessFile(datafile.toString(), "rw");
       File tmpFile = new File(datafile.toString() + "-append.tmp");
@@ -533,6 +537,7 @@ public class IFile {
       this.t1Class = t1Class;
       this.t2Class = t2Class;
       this.t3Class = t3Class;
+      this.t4Class = t4Class;
       SerializationFactory serializationFactory = new SerializationFactory(conf);
       this.t1Serializer = serializationFactory.getSerializer(t1Class);
       this.t1Serializer.open(buffer);
@@ -540,6 +545,8 @@ public class IFile {
       this.t2Serializer.open(buffer);
       this.t3Serializer = serializationFactory.getSerializer(t3Class);
       this.t3Serializer.open(buffer);
+      this.t4Serializer = serializationFactory.getSerializer(t4Class);
+      this.t4Serializer.open(buffer);
       
       indexOut = fs.create(newindexfile);
       this.fileLength = fs.getFileStatus(datafile).getLen();
@@ -585,9 +592,7 @@ public class IFile {
     }
 
     public void close() throws IOException {
-      // Close the underlying stream
-      dataIn.close();
-        
+
       // Release the buffer
       dataIn = null;
       databuffer = null;
@@ -596,6 +601,7 @@ public class IFile {
       t1Serializer.close();
       t2Serializer.close();
       t3Serializer.close();
+      t4Serializer.close();
 
       //append the appendfile to the datafile, merge two files as one file
       appendFile.seek(0);
@@ -712,14 +718,14 @@ public class IFile {
       ++numRecordsWritten;
     }
     
-    public void appendResKV(KEY t1, VALUE t2) throws IOException {
+    public void appendResKV(KEY t1, OUTVALUE t4) throws IOException {
         if (t1.getClass() != t1Class)
             throw new IOException("wrong t1 class: "+ t1.getClass()
                                   +" is not "+ t1Class);
         
-      if (t2.getClass() != t2Class)
-        throw new IOException("wrong t2 class: "+ t2.getClass()
-                              +" is not "+ t2Class);
+      if (t4.getClass() != t4Class)
+        throw new IOException("wrong t4 class: "+ t4.getClass()
+                              +" is not "+ t4Class);
 
 	  if(!t1.equals(cachedKey)){
 		  throw new IOException(t1 + "is not the key " + cachedKey + " that should be!");
@@ -734,16 +740,16 @@ public class IFile {
       }
       
       // Append the 'rvalue'
-      t2Serializer.serialize(t2);
-      int t2Length = buffer.getLength() - t1Length;
-      if (t2Length < 0) {
-        throw new IOException("Negative t2-length not allowed: " + t2Length + 
-                              " for " + t2);
+      t4Serializer.serialize(t4);
+      int t4Length = buffer.getLength() - t1Length;
+      if (t4Length < 0) {
+        throw new IOException("Negative t4-length not allowed: " + t4Length + 
+                              " for " + t4);
       }
       
       // Write the record out
       WritableUtils.writeVInt(dataFile, t1Length);                  // key length
-      WritableUtils.writeVInt(dataFile, t2Length);                  // key length
+      WritableUtils.writeVInt(dataFile, t4Length);                  // key length
       WritableUtils.writeVInt(dataFile, RESULT_KV_LABEL);           // value length
 
       /********************************
@@ -757,14 +763,14 @@ public class IFile {
       buffer.reset();
       
       // Update bytes written
-      bytesWritten += t1Length + t2Length + 
+      bytesWritten += t1Length + t4Length + 
     		  					  WritableUtils.getVIntSize(t1Length) + 
-                                  WritableUtils.getVIntSize(t2Length) + 
+                                  WritableUtils.getVIntSize(t4Length) + 
                                   WritableUtils.getVIntSize(RESULT_KV_LABEL);
       ++numRecordsWritten;
     }
     
-    public void update(int keyhash, T1 t1, T2 t2, T3 t3) throws IOException {
+    public void updateShuffleKVS(int keyhash, KEY t1, VALUE t2, SOURCE t3) throws IOException {
         if (t1.getClass() != t1Class)
             throw new IOException("wrong t1 class: "+ t1.getClass()
                                   +" is not "+ t1Class);
@@ -828,6 +834,59 @@ public class IFile {
     		  					  WritableUtils.getVIntSize(t1Length) + 
                                   WritableUtils.getVIntSize(t2Length) + 
                                   WritableUtils.getVIntSize(t3Length);
+      ++numRecordsWritten;
+    }
+    
+    public void updateResKV(int keyhash, KEY t1, OUTVALUE t4) throws IOException {
+        if (t1.getClass() != t1Class)
+            throw new IOException("wrong t1 class: "+ t1.getClass()
+                                  +" is not "+ t1Class);
+        
+      if (t4.getClass() != t4Class)
+        throw new IOException("wrong t4 class: "+ t4.getClass()
+                              +" is not "+ t4Class);
+
+      //updateShuffleKVS followed by updateResKV
+	  if(!t1.equals(cachedKey)){
+		  throw new IOException(t1 + "is not the key " + cachedKey + " that should be!");
+	  }
+	  
+      // Append the 'key'
+      t1Serializer.serialize(t1);
+      int t1Length = buffer.getLength();
+      if (t1Length < 0) {
+        throw new IOException("Negative key-length not allowed: " + t1Length + 
+                              " for " + t1);
+      }
+      
+      // Append the 'outvalue'
+      t4Serializer.serialize(t4);
+      int t4Length = buffer.getLength() - t1Length;
+      if (t4Length < 0) {
+        throw new IOException("Negative t4-length not allowed: " + t4Length + 
+                              " for " + t4);
+      }
+
+      // Write the record out
+      WritableUtils.writeVInt(appendFile, t1Length);                  // key length
+      WritableUtils.writeVInt(appendFile, t4Length);                  // key length
+      WritableUtils.writeVInt(appendFile, RESULT_KV_LABEL);                // value length
+
+      /********************************
+       * same key length and same value length, need optimize later
+       */
+      
+      //Log.info("key length : " + keyLength + " value length : " + valueLength);
+      appendFile.write(buffer.getData(), 0, buffer.getLength());       // data
+
+      // Reset
+      buffer.reset();
+      
+      // Update bytes written
+      bytesWritten += t1Length + t4Length +
+    		  					  WritableUtils.getVIntSize(t1Length) + 
+                                  WritableUtils.getVIntSize(t4Length) + 
+                                  WritableUtils.getVIntSize(RESULT_KV_LABEL);
       ++numRecordsWritten;
     }
     
@@ -916,7 +975,7 @@ public class IFile {
         return destination;
       }
       
-      public boolean seekKey(T1 key, int rehash, IntWritable hashcode) throws IOException{
+      public boolean seekKey(KEY key, int rehash, IntWritable hashcode) throws IOException{
     	  if(rehash != 0) Log.info("rehash " + rehash);
     	  
     	  int keyhash = key.hashCode();
@@ -950,7 +1009,7 @@ public class IFile {
       	  return true;
       }
       
-      public int next(DataInputBuffer t1, DataInputBuffer t2, DataInputBuffer t3) 
+      public TYPE next(DataInputBuffer t1, DataInputBuffer t2, DataInputBuffer t3, DataInputBuffer t4) 
       throws IOException {
         // Sanity check
         //if (eof) {
@@ -976,10 +1035,49 @@ public class IFile {
         
         //Log.info("lengths " + t1Length + "\t" + t2Length + "\t" + t3Length);
         
+        //this is the preserved output value record
+        if(t3Length == RESULT_KV_LABEL){
+            final int recordLength = t1Length + t2Length;
+            
+            //Log.info("record length " + recordLength);
+            
+            // Check if we have the raw key/value in the buffer
+            if ((dataIn.getLength()-pos) < recordLength) {
+              readNextBlock(recordLength);
+              
+              // Sanity check
+              if ((dataIn.getLength() - dataIn.getPosition()) < recordLength) {
+                throw new EOFException("Rec# " + recNo + ": Could read the next " +
+                		                   " record");
+              }
+            }
+
+            // Setup the key and value
+            pos = dataIn.getPosition();
+            byte[] data = dataIn.getData();
+            t1.reset(data, pos, t1Length);
+            t4.reset(data, (pos + t1Length), t2Length);
+            
+            // Position for the next record
+            long skipped = dataIn.skip(recordLength);
+            if (skipped != recordLength) {
+              throw new IOException("Rec# " + recNo + ": Failed to skip past record " +
+              		                  "of length: " + recordLength);
+            }
+            
+            // Record the bytes read
+            readbytes += recordLength;
+
+            ++recNo;
+            ++numRecordsRead;
+
+            return TYPE.RECORDEND;
+        }
+        
         // Check for EOF
         if (t1Length == EOF_MARKER && t2Length == EOF_MARKER && t3Length == EOF_MARKER) {
           //eof = true;
-          return false;
+          return TYPE.FILEEND;
         }
         
         // Sanity check
@@ -1031,7 +1129,7 @@ public class IFile {
         ++recNo;
         ++numRecordsRead;
 
-        return true;
+        return TYPE.MORE;
       }
 
   }
