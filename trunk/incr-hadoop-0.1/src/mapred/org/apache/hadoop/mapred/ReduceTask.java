@@ -27,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Writer;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -87,7 +88,6 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile.*;
-import org.apache.hadoop.mapred.IFile.PreserveFile;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.PreserveMerger.KVSSegment;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
@@ -382,16 +382,18 @@ class ReduceTask extends Task {
     }
   }
 
-  private class PreserveReduceValuesIterator<KEY,VALUE,SOURCEKEY> 
-	  extends SourceValuesIterator<KEY,VALUE,SOURCEKEY> {
+  private class PreserveReduceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> 
+	  extends SourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> {
 		public PreserveReduceValuesIterator (RawKeyValueSourceIterator in,
 		                         RawComparator<KEY> comparator, 
 		                         Class<KEY> keyClass,
 		                         Class<VALUE> valClass,
 		                         Class<SOURCEKEY> skeyClass,
+		                         Class<OUTVALUE> outvalueClass,
+		                         IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
 		                         Configuration conf, Progressable reporter)
 		throws IOException {
-			super(in, comparator, keyClass, valClass, skeyClass, getTaskID().getTaskID().getId(), conf, reporter);
+			super(in, comparator, keyClass, valClass, skeyClass, outvalueClass, preserveWriter, getTaskID().getTaskID().getId(), conf, reporter);
 		}
 		
 		@Override
@@ -410,17 +412,21 @@ class ReduceTask extends Task {
 		}
 	}
   
-  private class IncrementalReduceValuesIterator<KEY,VALUE,SOURCEKEY> 
-  extends IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY> {
+  private class IncrementalReduceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> 
+  extends IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> {
 	public IncrementalReduceValuesIterator (RawKeyValueSourceIterator in,
 							int iteration,
 	                         RawComparator<KEY> comparator, 
 	                         Class<KEY> keyClass,
 	                         Class<VALUE> valClass,
-	                         Class<SOURCEKEY> skeyClass, VALUE negativeV,
+	                         Class<SOURCEKEY> skeyClass, 
+	                         Class<OUTVALUE> outvalueClass,
+	                         IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
+	                         VALUE negativeV,
 	                         Configuration conf, Progressable reporter)
 	throws IOException {
-		super(in, iteration, comparator, keyClass, valClass, skeyClass, getTaskID().getTaskID().getId(), negativeV, conf, reporter);
+		super(in, iteration, comparator, keyClass, valClass, skeyClass, outvalueClass, preserveWriter,
+				getTaskID().getTaskID().getId(), negativeV, conf, reporter);
 	}
 	
 	@Override
@@ -439,10 +445,8 @@ class ReduceTask extends Task {
 	}
 }
   
-  static class SourceValuesIterator<KEY,VALUE,SOURCEKEY> implements Iterator<VALUE> {
+  static class SourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> implements Iterator<VALUE> {
 	    protected RawKeyValueSourceIterator in; //input iterator
-	    private JobConf job;
-	    private int taskid;
 	    private KEY key;               // current key
 	    private KEY nextKey;
 	    private VALUE value;             // current value
@@ -457,21 +461,23 @@ class ReduceTask extends Task {
 	    private DataInputBuffer keyIn = new DataInputBuffer();
 	    private DataInputBuffer valueIn = new DataInputBuffer();
 	    private DataInputBuffer skeyIn = new DataInputBuffer();
-	    private PreserveFile<KEY, VALUE, SOURCEKEY> writer;
-	    private Path localPath;
-	    private Path localIndexPath;
+	    private IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter;
 	    
 	    public SourceValuesIterator (RawKeyValueSourceIterator in, 
 	                           RawComparator<KEY> comparator, 
 	                           Class<KEY> keyClass,
 	                           Class<VALUE> valClass, 
-	                           Class<SOURCEKEY> skeyClass, int taskid, 
+	                           Class<SOURCEKEY> skeyClass, 
+	                           Class<OUTVALUE> outvalueClass,
+	                           IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
+	                           int taskid, 
 	                           Configuration conf, 
 	                           Progressable reporter)
 	      throws IOException {
 	      this.in = in;
 	      this.comparator = comparator;
 	      this.reporter = reporter;
+	      this.preserveWriter = preserveWriter;
 	      SerializationFactory serializationFactory = new SerializationFactory(conf);
 	      this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
 	      this.keyDeserializer.open(keyIn);
@@ -483,13 +489,6 @@ class ReduceTask extends Task {
 	      key = nextKey;
 	      nextKey = null; // force new instance creation
 	      hasNext = more;
-
-	      job = (JobConf)conf;
-	      this.taskid = taskid;
-	      localPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
-	      localIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid + ".index");
-	      writer = new IFile.PreserveFile<KEY, VALUE, SOURCEKEY>(job, localPath, null, localIndexPath,
-	    		  keyClass, valClass, skeyClass);
 	    }
 
 	    RawKeyValueIterator getRawIterator() { return in; }
@@ -507,7 +506,7 @@ class ReduceTask extends Task {
 	        readNextValue();
 	        readNextSource();
 	        
-	        writer.appendShuffleKVS(key, value, skey);
+	        preserveWriter.appendShuffleKVS(key, value, skey);
 	        
 	        //LOG.info(key + "\t" + skey + "\t" + value);
 	        
@@ -519,6 +518,10 @@ class ReduceTask extends Task {
 	      return value;
 	    }
 
+	    public void appendResKV(KEY key, OUTVALUE val) throws IOException{
+	    	preserveWriter.appendResKV(key, val);
+	    }
+	    
 	    public void remove() { throw new RuntimeException("not implemented"); }
 
 	    /// Auxiliary methods
@@ -580,14 +583,7 @@ class ReduceTask extends Task {
 	    }
 	    
 	    public void close() throws IOException{
-	    	writer.close();
-	    	
-	    	//copy the datafile and indexfile to hdfs
-		    Path remotePreservePath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid);
-		    Path remotePreserveIndexPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid + ".index");
-		    FileSystem hdfs = FileSystem.get(job);
-		    hdfs.copyFromLocalFile(localPath, remotePreservePath);
-		    hdfs.copyFromLocalFile(localIndexPath, remotePreserveIndexPath);
+	    	preserveWriter.close();
 	    }
   	}
   
@@ -599,24 +595,28 @@ class ReduceTask extends Task {
 	 * @param <VALUE>
 	 * @param <SOURCEKEY>
 	 */
-  static class IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY> implements Iterator<VALUE> {
+  static class IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> implements Iterator<VALUE> {
 	  
-	  class KSVTuple {
+	  class Record {
 		  KEY key;
 		  SOURCEKEY source;
 		  VALUE value;
+		  OUTVALUE outvalue;
+		  
+		  boolean isIntermediate = true;
 		  boolean hasNext = false;
 		  boolean processed = false;
 		  
-		  KSVTuple(KEY key, SOURCEKEY source, VALUE value){
+		  Record(KEY key, SOURCEKEY source, VALUE value, OUTVALUE outvalue){
 			  this.key = key;
 			  this.source = source;
 			  this.value = value;
+			  this.outvalue = outvalue;
 		  }
 		  
 		  @Override
 		  public String toString(){
-			  return key + "\t" + source + "\t" + value;
+			  return key + "\t" + source + "\t" + value + "\t" + outvalue;
 		  }
 	  }
 	  
@@ -624,11 +624,11 @@ class ReduceTask extends Task {
 	   * 3LineReader, a 3 bucket buffer that buffers 3 lines of the delta file
 	   */
 	  class ThreeLineBuffer{
-			public KSVTuple lineA;
+			public Record lineA;
 			
-			public KSVTuple lineB;
+			public Record lineB;
 
-			public KSVTuple lineC;
+			public Record lineC;
 			
 			private VALUE nv;
 
@@ -644,13 +644,13 @@ class ReduceTask extends Task {
 				return lineA != null && lineB != null && lineC != null;
 			}
 
-			public List<KSVTuple> getValue() {
+			public List<Record> getValue() {
 			
 				//LOG.info("* A:" + lineA + " negativeV " + nv);
 				//LOG.info("* B:" + lineB);
 				//LOG.info("* C:" + lineC);
 
-				List<KSVTuple> recordsList = new ArrayList<KSVTuple>();
+				List<Record> recordsList = new ArrayList<Record>();
 
 				// A && B row same return 1 tuple combining A and B
 				if (lineA.key.equals(lineB.key) && lineA.source.equals(lineB.source)) {
@@ -665,7 +665,7 @@ class ReduceTask extends Task {
 						deltaValue = negativeV;
 					}
 					
-					KSVTuple record = new KSVTuple(lineA.key, lineA.source, deltaValue);
+					Record record = new Record(lineA.key, lineA.source, deltaValue, null);
 					
 					//LOG.info("insert " + record);
 					
@@ -678,7 +678,7 @@ class ReduceTask extends Task {
 				// B && C row same, return 2 tuples, A and B&C
 				else if (lineB.key.equals(lineC.key) && lineB.source.equals(lineC.source)) {
 				
-					KSVTuple record1 = new KSVTuple(lineA.key, lineA.source, lineA.value);
+					Record record1 = new Record(lineA.key, lineA.source, lineA.value, null);
 					
 					//LOG.info("insert " + record1);
 					
@@ -694,7 +694,7 @@ class ReduceTask extends Task {
 						deltaValue = negativeV;
 					}
 					
-					KSVTuple record2 = new KSVTuple(lineB.key, lineB.source, deltaValue);
+					Record record2 = new Record(lineB.key, lineB.source, deltaValue, null);
 					
 					//LOG.info("insert " + record2);
 				
@@ -707,13 +707,13 @@ class ReduceTask extends Task {
 				// A && B row not same, return 2 tuples A and B
 				else if (!lineA.key.equals(lineB.key) || !lineA.source.equals(lineB.source)) {
 				
-					KSVTuple record1 = new KSVTuple(lineA.key, lineA.source, lineA.value);
+					Record record1 = new Record(lineA.key, lineA.source, lineA.value, null);
 					
 					//LOG.info("insert " + record1);
 					
 					recordsList.add(record1);
 					
-					KSVTuple record2 = new KSVTuple(lineB.key, lineB.source, lineB.value);
+					Record record2 = new Record(lineB.key, lineB.source, lineB.value, null);
 					
 					//LOG.info("insert " + record2);
 					
@@ -728,17 +728,17 @@ class ReduceTask extends Task {
 
 			}
 
-			public List<KSVTuple> getRestValue() {
+			public List<Record> getRestValue() {
 
 //				System.out.println("*1 A:" + Arrays.toString(lineA));
 //				System.out.println("*2 B:" + Arrays.toString(lineB));
 //				System.out.println("*3 C:" + Arrays.toString(lineC));
 
-				List<KSVTuple> recordsList = new ArrayList<KSVTuple>();
+				List<Record> recordsList = new ArrayList<Record>();
 
 				//only one record left in the buffer
 				if (lineA != null && lineB == null && lineC == null){
-					KSVTuple record = new KSVTuple(lineA.key, lineA.source, lineA.value);
+					Record record = new Record(lineA.key, lineA.source, lineA.value, null);
 					
 					recordsList.add(record);
 				}
@@ -756,7 +756,7 @@ class ReduceTask extends Task {
 							deltaValue = negativeV;
 						}
 						
-						KSVTuple record = new KSVTuple(lineA.key, lineA.source, deltaValue);
+						Record record = new Record(lineA.key, lineA.source, deltaValue, null);
 						
 						//lineA = lineC;
 						lineA = null;
@@ -767,11 +767,11 @@ class ReduceTask extends Task {
 					}
 					//the two not same, return both
 					else {
-						KSVTuple record1 = new KSVTuple(lineA.key, lineA.source, lineA.value);
+						Record record1 = new Record(lineA.key, lineA.source, lineA.value, null);
 						
 						recordsList.add(record1);
 						
-						KSVTuple record2 = new KSVTuple(lineB.key, lineB.source, lineB.value);
+						Record record2 = new Record(lineB.key, lineB.source, lineB.value, null);
 						
 						recordsList.add(record2);
 					}
@@ -803,7 +803,7 @@ class ReduceTask extends Task {
 		  DataInputBuffer valueIn = new DataInputBuffer();
 		  DataInputBuffer skeyIn = new DataInputBuffer();
 		  
-		  LinkedList<KSVTuple> recordQueue = new LinkedList<KSVTuple>();
+		  LinkedList<Record> recordQueue = new LinkedList<Record>();
 		  
 		  public DeltaFileReader(RawKeyValueSourceIterator in, JobConf job,
 				  Class<KEY> keyClass,
@@ -823,7 +823,7 @@ class ReduceTask extends Task {
 		      extractRecords();
 		  }
 		  
-		  public KSVTuple nextRecord() throws IOException{
+		  public Record nextRecord() throws IOException{
 			  //LOG.info("queue size is " + recordQueue.size());
 			  if(recordQueue.isEmpty()){
 				  //LOG.info("extract records");
@@ -843,7 +843,7 @@ class ReduceTask extends Task {
 					    
 					    //LOG.info("delta file read " + key + "\t" + source + "\t" + value);
 					      
-						threeLineBuffer.lineA = new KSVTuple(key, source, value);
+						threeLineBuffer.lineA = new Record(key, source, value, null);
 						continue;
 					}
 					
@@ -854,7 +854,7 @@ class ReduceTask extends Task {
 					      
 					    //LOG.info("delta file read " + key + "\t" + source + "\t" + value);
 					    
-						threeLineBuffer.lineB = new KSVTuple(key, source, value);
+						threeLineBuffer.lineB = new Record(key, source, value, null);
 
 						continue;
 					}
@@ -865,16 +865,16 @@ class ReduceTask extends Task {
 				    
 				    //LOG.info("delta file read " + key + "\t" + source + "\t" + value);
 				    
-					threeLineBuffer.lineC = new KSVTuple(key, source, value);
+					threeLineBuffer.lineC = new Record(key, source, value, null);
 		
-					List<KSVTuple> newrecordsList = threeLineBuffer.getValue();
+					List<Record> newrecordsList = threeLineBuffer.getValue();
 					
 					recordQueue.addAll(newrecordsList);
 					return;
 		      }
 		      
 		      if (!threeLineBuffer.isEmpty()) {
-					List<KSVTuple> newrecordsList = threeLineBuffer.getRestValue();
+					List<Record> newrecordsList = threeLineBuffer.getRestValue();
 					recordQueue.addAll(newrecordsList);
 		      }
 		  }
@@ -915,24 +915,27 @@ class ReduceTask extends Task {
 	   */
 	  class WrapPreserveFile{
 		  
-		  IFile.PreserveFile<KEY, VALUE, SOURCEKEY> preserveFile;
+		  IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveFile;
 		  Deserializer<KEY> keyDeserializer1;
 		  Deserializer<VALUE> valDeserializer1;
 		  Deserializer<SOURCEKEY> skeyDeserializer1;
+		  Deserializer<OUTVALUE> outvalDeserializer1;
 		  DataInputBuffer keyIn1 = new DataInputBuffer();
 		  DataInputBuffer valueIn1 = new DataInputBuffer();
 		  DataInputBuffer skeyIn1 = new DataInputBuffer();
+		  DataInputBuffer outvalueIn1 = new DataInputBuffer();
 		  RawComparator<SOURCEKEY> comparator;
 		  boolean hasNext = true;
 		  boolean fileEnd = false;
-		  KSVTuple preserveRecord;
+		  Record preserveRecord;
 		  int keyhash;
 		  
 		  public WrapPreserveFile(JobConf job,
-				  IFile.PreserveFile<KEY, VALUE, SOURCEKEY> preserveFile,
+				  IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveFile,
 				  Class<KEY> keyClass,
                   Class<VALUE> valClass, 
                   Class<SOURCEKEY> skeyClass,
+                  Class<OUTVALUE> outvalClass,
                   RawComparator<SOURCEKEY> com) throws IOException{
 			  this.preserveFile = preserveFile;
 			  comparator = com;
@@ -943,6 +946,8 @@ class ReduceTask extends Task {
 		      this.valDeserializer1.open(valueIn1);
 		      this.skeyDeserializer1 = serializationFactory.getDeserializer(skeyClass);
 		      this.skeyDeserializer1.open(skeyIn1);
+		      this.outvalDeserializer1 = serializationFactory.getDeserializer(outvalClass);
+		      this.outvalDeserializer1.open(outvalueIn1);
 		  }
 		  
 		  public void close() throws IOException{
@@ -954,12 +959,14 @@ class ReduceTask extends Task {
 			  return preserveFile.seekKey(k, rehash, hashcode);
 		  }
 		  
-		  public KSVTuple getNextValue(KEY k) throws IOException{
+		  public Record getNextRecord(KEY k) throws IOException{
 			  KEY key1 = null;
 			  SOURCEKEY source1 = null;
 			  VALUE value1 = null;
+			  OUTVALUE outvalue1 = null;
 			  
-			  if(preserveFile.next(keyIn1, valueIn1, skeyIn1)){
+			  IFile.PreserveFile.TYPE returnType = preserveFile.next(keyIn1, valueIn1, skeyIn1, outvalueIn1);
+			  if(returnType == IFile.PreserveFile.TYPE.MORE){
 				  //this might be a problem for deserializing
 				  //keyDeserializer1.open(keyIn1);
 				  key1 = keyDeserializer1.deserialize(key1);
@@ -969,7 +976,20 @@ class ReduceTask extends Task {
 				  source1 = skeyDeserializer1.deserialize(source1);
 				  
 				  if(key1.equals(k)){
-					  preserveRecord = new KSVTuple(key1, source1, value1);
+					  preserveRecord = new Record(key1, source1, value1, null);
+					  //LOG.info("read preserve record: " + preserveRecord);
+					  return preserveRecord;
+				  }else{
+					  return null;
+				  }
+			  }else if(returnType == IFile.PreserveFile.TYPE.RECORDEND){
+				  //read the preserved output key value pair
+				  key1 = keyDeserializer1.deserialize(key1);
+				  outvalue1 = outvalDeserializer1.deserialize(outvalue1);
+				  
+				  if(key1.equals(k)){
+					  preserveRecord = new Record(key1, null, null, outvalue1);
+					  preserveRecord.isIntermediate = false;
 					  //LOG.info("read preserve record: " + preserveRecord);
 					  return preserveRecord;
 				  }else{
@@ -982,7 +1002,11 @@ class ReduceTask extends Task {
 		  }
 		  
 		  public void update(int keyhash, KEY t1, VALUE t2, SOURCEKEY t3) throws IOException{
-			  preserveFile.update(keyhash, t1, t2, t3);
+			  preserveFile.updateShuffleKVS(keyhash, t1, t2, t3);
+		  }
+		  
+		  public void update(int keyhash, KEY t1, OUTVALUE t4) throws IOException{
+			  preserveFile.updateResKV(keyhash, t1, t4);
 		  }
 	  }
 	  
@@ -992,21 +1016,25 @@ class ReduceTask extends Task {
 	    private DeltaFileReader deltaReader;
 	    private WrapPreserveFile wrapPreserveFile;
 		private RawComparator<SOURCEKEY> comparator2;
-		private KSVTuple currDeltaRecord;
-		private KSVTuple nextDeltaRecord;
-		private KSVTuple currPreserveRecord;
-		private KSVTuple returnTuple;
+		private Record currDeltaRecord;
+		private Record nextDeltaRecord;
+		private Record currPreserveRecord;
+		private Record returnTuple;
 		protected Progressable reporter;
 		private JobConf job;
 		private boolean preserveHasNext = true;
 		private IntWritable keyHashBuffer = new IntWritable();
+		private OUTVALUE preservedOutValue = null;
 	    
 	    public IncrementalSourceValuesIterator (RawKeyValueSourceIterator in, 
 	    						int iteration,
 	                           RawComparator<KEY> comparator, 
 	                           Class<KEY> keyClass,
 	                           Class<VALUE> valClass, 
-	                           Class<SOURCEKEY> skeyClass, int taskid, VALUE negativeV, 
+	                           Class<SOURCEKEY> skeyClass, 
+	                           Class<OUTVALUE> outvalueClass,
+	                           IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
+	                           int taskid, VALUE negativeV, 
 	                           Configuration conf, 
 	                           Progressable reporter)throws IOException {
 	      this.negativeV = negativeV;
@@ -1015,58 +1043,9 @@ class ReduceTask extends Task {
 	      job = (JobConf)conf;
 	      
 	      comparator2 = (RawComparator<SOURCEKEY>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
-
-	      FileSystem hdfs = FileSystem.get(job);
-	      FileSystem localfs = FileSystem.getLocal(job); 
-
-	      IFile.PreserveFile<KEY, VALUE, SOURCEKEY> preserveFile = null;
-	      
-	      if(job.isIncrementalStart()){
-		      Path remotePreservedPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid);
-		      Path remotePreservedIndexPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid + ".index");
-		      Path preservedPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
-		      Path oldPreservedIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid + ".index");
-	    	  Path newPreserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-0-" + taskid + ".index");
-
-	      	  if(hdfs.exists(remotePreservedPath)){
-	      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
-	      		  if(!localfs.exists(preservedPath)){
-	      			  hdfs.copyToLocalFile(remotePreservedPath, preservedPath);
-	      			  hdfs.copyToLocalFile(remotePreservedIndexPath, oldPreservedIndexPath);
-	      			  LOG.info("copy remote preserve file " + remotePreservedPath + " to local disk" + preservedPath + "!!!!!!!!! and file size is " + localfs.getFileStatus(preservedPath).getLen());
-	      		  }
-	  				
-	      		  preserveFile = new IFile.PreserveFile<KEY, VALUE, SOURCEKEY>(conf, preservedPath,
-	      				oldPreservedIndexPath, newPreserveIndexPath, keyClass, valClass, skeyClass);
-	      	  }else{
-	      		  throw new IOException("acturally, there is no preserve data on the path you" +
-	  					" have set! Please check the path and check the map task number " + remotePreservedPath);
-	      	  }
-	      }else if(job.isIncrementalIterative()){
-		      Path remotePreservedPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid);
-		      Path remotePreservedIndexPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid + ".index");
-		      Path preservedPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
-		      Path oldPreservedIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + (iteration-1) + "-" + taskid + ".index");
-	    	  Path newPreserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + iteration + "-" + taskid + ".index");
-	    	  
-	      	  if(hdfs.exists(remotePreservedPath)){
-	      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
-	      		  if(!localfs.exists(preservedPath)){
-	      			  hdfs.copyToLocalFile(remotePreservedPath, preservedPath);
-	      			  hdfs.copyToLocalFile(remotePreservedIndexPath, oldPreservedIndexPath);
-	      			  LOG.info("copy remote preserve file " + remotePreservedPath + " to local disk" + preservedPath + "!!!!!!!!! and file size is " + localfs.getFileStatus(preservedPath).getLen());
-	      		  }
-	  				
-	      		  preserveFile = new IFile.PreserveFile<KEY, VALUE, SOURCEKEY>(conf, preservedPath,
-	      				oldPreservedIndexPath, newPreserveIndexPath, keyClass, valClass, skeyClass);
-	      	  }else{
-	      		  throw new IOException("acturally, there is no preserve data on the path you" +
-	  					" have set! Please check the path and check the map task number " + remotePreservedPath);
-	      	  }
-	      }
                            
 	      this.deltaReader = new DeltaFileReader(in, job, keyClass, valClass, skeyClass, negativeV);
-	      wrapPreserveFile = new WrapPreserveFile(job, preserveFile, keyClass, valClass, skeyClass, comparator2);
+	      wrapPreserveFile = new WrapPreserveFile(job, preserveWriter, keyClass, valClass, skeyClass, outvalueClass, comparator2);
 	      
 	      currDeltaRecord = deltaReader.nextRecord();
 	      if(currDeltaRecord == null) throw new RuntimeException("no entries in delta file!!!");
@@ -1078,7 +1057,7 @@ class ReduceTask extends Task {
 	      int trial = 0;
 	      while(currPreserveRecord==null && wrapPreserveFile.seek(currDeltaRecord.key, trial, keyHashBuffer)){
 	    	  trial++;
-	    	  currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
+	    	  currPreserveRecord = wrapPreserveFile.getNextRecord(currDeltaRecord.key);
 	    	  LOG.info("record: " + currPreserveRecord);
 	      }
 	      
@@ -1115,21 +1094,30 @@ class ReduceTask extends Task {
 	    		
 	    		if(currDeltaRecord == null){
 	    			 //process the preserve file entry
-			    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
+			    	  returnTuple = new Record(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value, null);
 
-			    	  currPreserveRecord = wrapPreserveFile.getNextValue(currPreserveRecord.key);
+			    	  currPreserveRecord = wrapPreserveFile.getNextRecord(currPreserveRecord.key);
+			    	  
+			    	  if(currPreserveRecord.isIntermediate){
+			    		  preserveHasNext = true;
+			    	  }else{
+			    		  preserveHasNext = false;
+			    		  preservedOutValue = currPreserveRecord.outvalue;
+			    	  }
+			    	  /*
 			    	  if(currPreserveRecord != null){
 			    		  preserveHasNext = true;
 			    	  }else{
 			    		  preserveHasNext = false;
 			    	  }
+			    	  */
 			    	  
 			    	  wrapPreserveFile.update(keyHashBuffer.get(), returnTuple.key, returnTuple.value, returnTuple.source);
 			    	  //LOG.info("deltanull write: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source + "\t" + currPreserveRecord);
 			    	  
 	    		}else if(currPreserveRecord == null){
 		  	    	  //process the new file entry
-		  	    	  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+		  	    	  returnTuple = new Record(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value, null);
 		  	    	  
 		  	    	  if(more){
 			    		  //read a line of delta file if these two are with the same key
@@ -1156,14 +1144,14 @@ class ReduceTask extends Task {
 
 			  	      if(cmpres < 0){
 			  	    	  if(nextDeltaRecord == null){
-			    			  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+			    			  returnTuple = new Record(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value, null);
 			    			  preserveHasNext = true;
 			    			  currDeltaRecord = null;
 			  	    	  }else{
 			  	    		//read the delta file if we have more new delta kv pairs for the same key
 				    		  if(currDeltaRecord.key.equals(nextDeltaRecord.key)){
 					  	    	  //process the new file entry
-					  	    	  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+					  	    	  returnTuple = new Record(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value, null);
 					  	    	  
 					  	    	  currDeltaRecord = nextDeltaRecord;
 					  	    	  currDeltaRecord.processed = false;
@@ -1181,16 +1169,20 @@ class ReduceTask extends Task {
 				    		  }
 				    		  //not processed delta record
 				    		  else if(!currDeltaRecord.processed){
-				    			  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+				    			  returnTuple = new Record(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value, null);
 				    			  currDeltaRecord.processed = true;
 				    		  }
 				    		  //already processed delta record, then read the preserve file for processing the remaining kv pairs for the key
 				    		  else{
 						    	  //process the remaining preserve file entry
-						    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
+						    	  returnTuple = new Record(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value, null);
 						        	
-						    	  currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
+						    	  currPreserveRecord = wrapPreserveFile.getNextRecord(currDeltaRecord.key);
 						    	  
+						    	  if(!currPreserveRecord.isIntermediate){
+						    		  preservedOutValue = currPreserveRecord.outvalue;	
+						    		  currPreserveRecord = null;	  
+						    	  }
 						    	  //LOG.info("process preserve data: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 
 				    		  }
 			  	    	  }
@@ -1199,21 +1191,32 @@ class ReduceTask extends Task {
 					      //LOG.info("preserve write1: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source);
 				      }else if(cmpres > 0){
 				    	  //process the preserve file entry
-				    	  returnTuple = new KSVTuple(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value);
+				    	  returnTuple = new Record(currPreserveRecord.key, currPreserveRecord.source, currPreserveRecord.value, null);
 				        	
 				    	  if(currDeltaRecord.key.equals(currPreserveRecord.key)){
 				    		  currDeltaRecord.hasNext = true;
 				    	  }
 				    	  
-				    	  currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
+				    	  currPreserveRecord = wrapPreserveFile.getNextRecord(currDeltaRecord.key);
+				    	  
+				    	  if(!currPreserveRecord.isIntermediate){
+				    		  preservedOutValue = currPreserveRecord.outvalue;	
+				    		  currPreserveRecord = null;		  
+				    	  }
 				    	  
 				    	  wrapPreserveFile.update(keyHashBuffer.get(), returnTuple.key, returnTuple.value, returnTuple.source);
 				    	  //LOG.info("preserve write2: " + returnTuple.key + "\t" + returnTuple.value + "\t" + returnTuple.source + "\t" + currPreserveRecord);
 				    	  //LOG.info("process preserve data: " + returnTuple.key + "\t" + returnTuple.source + "\t" + returnTuple.value); 	
 				      }else{
 			    		  //read a line of preserve file, meaning skipping that record
-			    		  currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
-			    		  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+			    		  currPreserveRecord = wrapPreserveFile.getNextRecord(currDeltaRecord.key);
+			    		  
+				    	  if(!currPreserveRecord.isIntermediate){
+				    		  preservedOutValue = currPreserveRecord.outvalue;	
+				    		  currPreserveRecord = null;
+				    	  }
+				    	  
+			    		  returnTuple = new Record(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value, null);
 			    		  
 				    	  //if equal, replace the preserver file entry otherwise skip it
 				    	  if(!currDeltaRecord.value.equals(negativeV)){
@@ -1255,7 +1258,7 @@ class ReduceTask extends Task {
 	    			throw new IOException("will this happer?");
 	    			/*
 		  	    	  //process the new file entry
-		  	    	  returnTuple = new KSVTuple(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
+		  	    	  returnTuple = new Record(currDeltaRecord.key, currDeltaRecord.source, currDeltaRecord.value);
 		  	    	  
 		    		  //read a line of delta file if these two are with the same key
 		    		  if(currDeltaRecord.key.equals(nextDeltaRecord.key)){
@@ -1284,6 +1287,14 @@ class ReduceTask extends Task {
 
 	    public void remove() { throw new RuntimeException("not implemented"); }
 
+	    public OUTVALUE getPreservedOutValue(){
+	    	return preservedOutValue;
+	    }
+	    
+	    public void updateResKV(KEY key, OUTVALUE outvalue) throws IOException{
+	    	wrapPreserveFile.update(keyHashBuffer.get(), key, outvalue);
+	    }
+	    
 	    /** Start processing next unique key. */
 	    void nextKey() throws IOException {
 	    	/*
@@ -1309,9 +1320,10 @@ class ReduceTask extends Task {
 
 		    int trial = 0;
 		    currPreserveRecord = null;
+		    preservedOutValue = null;
 		    while(currPreserveRecord==null && wrapPreserveFile.seek(currDeltaRecord.key, trial, keyHashBuffer)){
 		    	trial++;
-		    	currPreserveRecord = wrapPreserveFile.getNextValue(currDeltaRecord.key);
+		    	currPreserveRecord = wrapPreserveFile.getNextRecord(currDeltaRecord.key);
 		    }
 		    	  
 	    	currDeltaRecord.hasNext = true;
@@ -1527,7 +1539,7 @@ class ReduceTask extends Task {
                     keyClass, valueClass);
         }else if(job.isPreserve()){
         	runPreserveReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, comparator, 
-                    keyClass, valueClass, job.getStaticKeyClass());
+                    keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass());
         }else if(job.isIncrementalStart()){
         	/*
         	RawKeyValueSourceIterator preserveIter = null;
@@ -1538,7 +1550,7 @@ class ReduceTask extends Task {
         	}
         	*/
         	runIncrementalReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, comparator, 
-                        keyClass, valueClass, job.getStaticKeyClass());
+                        keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass());
         } else if(useNewApi) {
           runNewReducer(job, umbilical, reporter, rIter, comparator, 
                         keyClass, valueClass);
@@ -1621,7 +1633,7 @@ class ReduceTask extends Task {
 	        	}
 	        	*/
 	        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, comparator, 
-	                        keyClass, valueClass, job.getStaticKeyClass());
+	                        keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass());
 	        	
 	        	long time4 = System.currentTimeMillis();
 	        	
@@ -1740,12 +1752,12 @@ class ReduceTask extends Task {
 	    	  //for hdfs reduce output
 	          FileSystem hdfs = FileSystem.get(job);
 	          FSDataOutputStream out = hdfs.create(new Path(finalName));
-	          this.real = new Writer<K, V>(job, out, keyclass, valclass, null, outputRecordCounter);
+	          this.real = new IFile.Writer<K, V>(job, out, keyclass, valclass, null, outputRecordCounter);
 	      }else{
 	    	  //for local reduce output
 	          FileSystem lfs = FileSystem.getLocal(job);
 	          FSDataOutputStream out = lfs.create(new Path(finalName));
-	          this.real = new Writer<K, V>(job, out, keyclass, valclass, null, outputRecordCounter);
+	          this.real = new IFile.Writer<K, V>(job, out, keyclass, valclass, null, outputRecordCounter);
 	      }
 
 	      long bytesOutCurr = getOutputBytes(fsStats);
@@ -1782,6 +1794,7 @@ class ReduceTask extends Task {
 	  private boolean termcheck;
 	  private OUTKEY lastResultKey;
 	  private OUTVALUE lastResultValue;
+	  private OUTVALUE collectedValue;
 	  
 	  public WrappedOutputLocalCollector(RecordWriter<OUTKEY,OUTVALUE> localwriter, TaskReporter inreporter, 
 			  TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE> intermchecker) throws IOException{
@@ -1800,6 +1813,7 @@ class ReduceTask extends Task {
 	public void collect(OUTKEY key, OUTVALUE value) throws IOException {
 		//LOG.info("collect " + key + "\t" + value);
 		localwriter.write(key, value);
+		collectedValue = value;
 		reporter.progress();
 		
 		if(termcheck) {
@@ -1810,6 +1824,66 @@ class ReduceTask extends Task {
 				termchecker.accumulateDistance(key, lastResultValue, value);
 			}
 		}
+	}
+	
+	public OUTVALUE collectedValue(){
+		return collectedValue;
+	}
+	
+	public void clearCollectedValue(){
+		collectedValue = null;
+	}
+  }
+  
+  private class WrappedIndexOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> implements OutputCollector<OUTKEY,OUTVALUE>{
+	  private TaskReporter reporter;
+	  private TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE> termchecker;
+	  private RecordReader<OUTKEY,OUTVALUE> lastResultReader;
+	  private boolean termcheck;
+	  private OUTKEY lastResultKey;
+	  private OUTVALUE lastResultValue;
+	  private OUTKEY collectedKey;
+	  private OUTVALUE collectedValue;
+	  
+	  public WrappedIndexOutputLocalCollector(TaskReporter inreporter, 
+			  TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE> intermchecker) throws IOException{
+		  reporter = inreporter;
+		  termchecker = intermchecker;
+		  termcheck = (intermchecker == null) ? false : true;
+		  if(termcheck){
+			  lastResultReader = termchecker.getTermCheckReader();
+			  lastResultKey = lastResultReader.createKey();
+			  lastResultValue = lastResultReader.createValue();
+		  }
+	  }
+	  
+	@Override
+	public void collect(OUTKEY key, OUTVALUE value) throws IOException {
+		//LOG.info("collect " + key + "\t" + value);
+		collectedValue = value;
+		collectedKey = key;
+		reporter.progress();
+		
+		if(termcheck) {
+			lastResultReader.next(lastResultKey, lastResultValue);
+			if(!lastResultKey.equals(key)){
+				throw new IOException("Keys do not match during termination check! Old Key: " + lastResultKey + " New Key: " + key);
+			}else{
+				termchecker.accumulateDistance(key, lastResultValue, value);
+			}
+		}
+	}
+	
+	public OUTKEY collectedKey(){
+		return collectedKey;
+	}
+	
+	public OUTVALUE collectedValue(){
+		return collectedValue;
+	}
+	
+	public void clearCollectedValue(){
+		collectedValue = null;
 	}
   }
   
@@ -2392,24 +2466,28 @@ class ReduceTask extends Task {
                      RawComparator<INKEY> comparator,
                      Class<INKEY> keyClass,
                      Class<INVALUE> valueClass,
-                     Class<SOURCEKEY> skeyClass) throws IOException {
+                     Class<SOURCEKEY> skeyClass,
+                     Class<OUTVALUE> outvalueClass) throws IOException {
 	  
 	long taskstart = new Date().getTime();
 	
     IterativeReducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer = 
       ReflectionUtils.newInstance(job.getIterativeReducerClass(), job);
-
+    
+    /*
     boolean writeHDFS = false;
     if(job.getIterationNum() % job.getCheckPointInterval() == 0 || job.getCheckPointInterval() == -1){
     	writeHDFS = true;
     }
     if(job.getOutputKeyClass().equals(GlobalUniqKeyWritable.class)) writeHDFS = false;
+    */
     
 	//result is dump to local fs, reduce output is localkvstate, create local state data files on local fs
-	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + job.getIterationNum() + "." + this.getTaskID().getTaskID().getId());
-    final RecordWriter<OUTKEY, OUTVALUE> localOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
+	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-0." + this.getTaskID().getTaskID().getId());
+    final RecordWriter<INKEY, OUTVALUE> localOut = new OldTrackingRecordWriter<INKEY, OUTVALUE>(
             reduceOutputCounter, job, reporter, localfilename, false);
     
+    /*
     //whether to perform termination check based on distance
     float threshold = job.getDistanceThreshold();
     TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE> termchecker = null;
@@ -2417,10 +2495,21 @@ class ReduceTask extends Task {
     if(termcheck){
     	termchecker = new TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE>(conf.getIterationNum(), reporter);
     }
-
-    OutputCollector<OUTKEY,OUTVALUE> collector;
-    collector = new WrappedOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(
-    			localOut, reporter, termchecker);
+    */ 
+    
+    WrappedIndexOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> collector
+    	= new WrappedIndexOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(reporter, null);	//now, we skip terminator
+    
+    int taskid = this.getTaskID().getTaskID().getId();
+    Path preservePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
+    Path preserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid + ".index");
+    IFile.PreserveFile<INKEY, INVALUE, SOURCEKEY, OUTVALUE> writer = new IFile.PreserveFile<INKEY, INVALUE, SOURCEKEY, OUTVALUE>(job, preservePath, null, preserveIndexPath,
+  		  keyClass, valueClass, skeyClass, outvalueClass);
+    
+    PreserveReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
+  		  new PreserveReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 
+		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
+		          writer, job, reporter);
     
     // apply reduce function
     try {
@@ -2431,17 +2520,16 @@ class ReduceTask extends Task {
       if(isSkipping()){
     	  throw new IOException("should consider skipping case!!!!");
       }
-      
-      PreserveReduceValuesIterator<INKEY,INVALUE,SOURCEKEY> values = 
-    		  new PreserveReduceValuesIterator<INKEY,INVALUE,SOURCEKEY>(rIter, 
-		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass,
-		          job, reporter);
       values.informReduceProgress();
       
       while (values.more()) {
         reduceInputKeyCounter.increment(1);
         
+        collector.clearCollectedValue();
         reducer.reduce(values.getKey(), values, collector, reporter);
+        OUTVALUE value = collector.collectedValue();
+        values.appendResKV(values.getKey(), value);
+        localOut.write(values.getKey(), value);
         
         if(incrProcCount) {
           reporter.incrCounter(SkipBadRecords.COUNTER_GROUP, 
@@ -2455,19 +2543,27 @@ class ReduceTask extends Task {
       values.close();		//close the k,sk,v writer
       reducer.close();
       localOut.close(reporter);
-      if(termcheck) termchecker.close();
+      //if(termcheck) termchecker.close();
       
+      boolean writeHDFS = true;
       if(writeHDFS){
     	  FileSystem hdfs = FileSystem.get(job);
+    	  hdfs.copyFromLocalFile(false, preservePath, 
+    			  new Path(job.getPreserveStatePath() + "/preserve-" + taskid));
+    	  hdfs.copyFromLocalFile(false, preserveIndexPath, 
+    			  new Path(job.getPreserveStatePath() + "/preserve-" + taskid + ".index"));
+    	  
     	  hdfs.copyFromLocalFile(false, new Path(localfilename), 
     			  new Path(job.get("mapred.output.dir") + "/" + getOutputName(getPartition())));
       }
 
+      /*
       //if global data, need to send to jobtracker, then the jobtracker will combine them
       if(job.getGlobalUniqValuePath() != null) {
     	  LOG.info("send global data to jobtracker!");
     	  sendGlobalData(job, localfilename, reporter);
       }
+      */
       
       //End of clean up.
     } catch (IOException ioe) {
@@ -2476,8 +2572,8 @@ class ReduceTask extends Task {
       } catch (IOException ignored) {}
         
       try {
-          localOut.close(reporter);
-          if(termcheck) termchecker.close();
+          writer.close();
+          //if(termcheck) termchecker.close();
       } catch (IOException ignored) {}
       
       throw ioe;
@@ -2490,9 +2586,11 @@ class ReduceTask extends Task {
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reduceInputKeyCounter.getCounter());
     event.setRunTime(taskend - taskstart);
+    /*
     if(termcheck){
     	event.setSubDistance(termchecker.getDistance());
     }
+    */
     
 	try {
 		umbilical.iterativeTaskComplete(event);
@@ -2542,7 +2640,7 @@ class ReduceTask extends Task {
   }
   
   @SuppressWarnings("unchecked")
-  private <INKEY,INVALUE,OUTKEY,OUTVALUE extends Writable,SOURCEKEY>
+  private <INKEY,INVALUE,OUTKEY,OUTVALUE,SOURCEKEY>
   void runIncrementalReducer(JobConf job,
                      TaskUmbilicalProtocol umbilical,
                      final TaskReporter reporter,
@@ -2550,29 +2648,53 @@ class ReduceTask extends Task {
                      RawComparator<INKEY> comparator,
                      Class<INKEY> keyClass,
                      Class<INVALUE> valueClass,
-                     Class<SOURCEKEY> skeyClass) throws IOException {
+                     Class<SOURCEKEY> skeyClass,
+                     Class<OUTVALUE> outvalueClass) throws IOException {
 	  
 	long taskstart = new Date().getTime();
 	
     IterativeReducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer = 
       ReflectionUtils.newInstance(job.getIterativeReducerClass(), job);
 
+    /*
     boolean writeHDFS = true;
     if(job.getOutputKeyClass().equals(GlobalUniqKeyWritable.class)) writeHDFS = false;
+    */
     
-	//result is dump to local fs, reduce output is localkvstate, create local state data files on local fs
-	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-0." + this.getTaskID().getTaskID().getId());
-    final RecordWriter<OUTKEY, OUTVALUE> localOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
-            reduceOutputCounter, job, reporter, localfilename, false);
+    WrappedIndexOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> collector
+		= new WrappedIndexOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(reporter, null);	//now, we skip terminator
     
+    int taskid = this.getTaskID().getTaskID().getId();
 	String filteredfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/filter-0." + this.getTaskID().getTaskID().getId());
     final RecordWriter<OUTKEY, OUTVALUE> filteredOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
             reduceOutputCounter, job, reporter, filteredfilename, false);
     
-    ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE> resultSet = new ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE>(conf.getIterationNum(), reporter);
-    FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> collector = new FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(
-    			localOut, filteredOut, reporter, resultSet);
-    
+    Path remotePreservedPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid);
+    Path remotePreservedIndexPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid + ".index");
+    Path preservedPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
+    Path oldPreservedIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid + ".index");
+	Path newPreserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-0-" + taskid + ".index");
+
+	IFile.PreserveFile<INKEY, INVALUE, SOURCEKEY, OUTVALUE> preserveFile;
+	if(hdfs.exists(remotePreservedPath)){
+		//if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
+		if(!localfs.exists(preservedPath)){
+			hdfs.copyToLocalFile(remotePreservedPath, preservedPath);
+			hdfs.copyToLocalFile(remotePreservedIndexPath, oldPreservedIndexPath);
+			LOG.info("copy remote preserve file " + remotePreservedPath + " to local disk" + preservedPath + "!!!!!!!!! and file size is " + localfs.getFileStatus(preservedPath).getLen());
+		}
+			
+		preserveFile = new IFile.PreserveFile<INKEY, INVALUE, SOURCEKEY, OUTVALUE>(conf, preservedPath,
+				oldPreservedIndexPath, newPreserveIndexPath, keyClass, valueClass, skeyClass, outvalueClass);
+	}else{
+		throw new IOException("acturally, there is no preserve data on the path you" +
+				" have set! Please check the path and check the map task number " + remotePreservedPath);
+	}
+	  
+    //FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> collector = new FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(
+    		//preserveFile, filteredOut, reporter);
+
+	int nonConvergedItems = 0;
     // apply reduce function
     try {
       //increment processed counter only if skipping feature is enabled
@@ -2583,47 +2705,77 @@ class ReduceTask extends Task {
     	  throw new IOException("should consider skipping case!!!!");
       }
       
-      IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY> values = 
-    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY>(rIter, 0,
-		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, reducer.removeLable(),
+      IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
+    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
+		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
+		          preserveFile,
+		          reducer.removeLable(),
 		          job, reporter);
       values.informReduceProgress();
+      
+      float filter_threshold = conf.getFilterThreshold();
       
       while (values.more()) {
         reduceInputKeyCounter.increment(1);
         
-        reducer.reduce(values.getKey(), values, collector, reporter);
+        collector.clearCollectedValue();
+        INKEY key = values.getKey();
+        reducer.reduce(key, values, collector, reporter);
+        OUTVALUE oldvalue = values.getPreservedOutValue();
+        OUTKEY newkey = collector.collectedKey();
+        OUTVALUE newvalue = collector.collectedValue();
         
+        //update the result key value pair
+        values.updateResKV(key, newvalue);
+        
+        //filter the neglective record, write the filtered records to filteredOut
+		float diff = reducer.distance(newkey, oldvalue, newvalue);
+		
+		//LOG.info("for key " + key + " source file " + largestPri + " diff between " + latestValue + " and " + value + " is " + diff);
+		
+		if(diff >= filter_threshold){
+			//localwriter.write(key, value);
+			filteredOut.write(newkey, newvalue);
+			//LOG.info("collect " + key + "\t" + value + " diff " + diff);
+			nonConvergedItems++;
+		}else{
+			//LOG.info("skip " + key + "\t" + value + " diff " + diff);
+		}
+		
         if(incrProcCount) {
           reporter.incrCounter(SkipBadRecords.COUNTER_GROUP, 
               SkipBadRecords.COUNTER_REDUCE_PROCESSED_GROUPS, 1);
         }
+        
         values.nextKey();
         values.informReduceProgress();
       }
     	  
       //for single preserve file
       //values.writeRest();
-      collector.writeRestKVs();
+      //collector.writeRestKVs();
       
       //Clean up: repeated in catch block below
-      localOut.close(reporter);
+      //localOut.close(reporter);
       filteredOut.close(reporter);
-      resultSet.close();
+      //resultSet.close();
       values.close();		//close the k,sk,v writer
       reducer.close();
       
+      boolean writeHDFS = false;
       if(writeHDFS){
     	  FileSystem hdfs = FileSystem.get(job);
-    	  hdfs.copyFromLocalFile(false, new Path(localfilename), 
-    			  new Path(job.get("mapred.output.dir") + "/" + getOutputName(getPartition())));
+    	  hdfs.copyFromLocalFile(false, preservedPath, remotePreservedPath);
+    	  hdfs.copyFromLocalFile(false, newPreserveIndexPath, remotePreservedIndexPath);
       }
 
+      /*
       //if global data, need to send to jobtracker, then the jobtracker will combine them
       if(job.getGlobalUniqValuePath() != null) {
     	  LOG.info("send global data to jobtracker!");
     	  sendGlobalData(job, localfilename, reporter);
       }
+      */
       
       //End of clean up.
     } catch (IOException ioe) {
@@ -2632,7 +2784,8 @@ class ReduceTask extends Task {
       } catch (IOException ignored) {}
         
       try {
-          localOut.close(reporter);
+          //localOut.close(reporter);
+    	  filteredOut.close(reporter);
       } catch (IOException ignored) {}
       
       throw ioe;
@@ -2645,9 +2798,9 @@ class ReduceTask extends Task {
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reduceInputKeyCounter.getCounter());
     event.setRunTime(taskend - taskstart);
-    int nonconvitems = ((FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>)collector).getNonConvergedItems();
-    LOG.info("non converged items number is " + nonconvitems);
-    event.setSubDistance(nonconvitems);
+    //int nonconvitems = ((FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>)collector).getNonConvergedItems();
+    LOG.info("non converged items number is " + nonConvergedItems);
+    event.setSubDistance(nonConvergedItems);
     
 	try {
 		umbilical.iterativeTaskComplete(event);
@@ -2658,7 +2811,7 @@ class ReduceTask extends Task {
   }
   
   @SuppressWarnings("unchecked")
-  private <INKEY,INVALUE,OUTKEY,OUTVALUE extends Writable,SOURCEKEY>
+  private <INKEY,INVALUE,OUTKEY,OUTVALUE,SOURCEKEY>
   void runIncrementalIterativeReducer(JobConf job,
                      TaskUmbilicalProtocol umbilical,
                      final TaskReporter reporter,
@@ -2667,29 +2820,51 @@ class ReduceTask extends Task {
                      RawComparator<INKEY> comparator,
                      Class<INKEY> keyClass,
                      Class<INVALUE> valueClass,
-                     Class<SOURCEKEY> skeyClass) throws IOException {
+                     Class<SOURCEKEY> skeyClass,
+                     Class<OUTVALUE> outvalueClass) throws IOException {
 	  
 	long taskstart = new Date().getTime();
 	
     IterativeReducer<INKEY,INVALUE,OUTKEY,OUTVALUE> reducer = 
       ReflectionUtils.newInstance(job.getIterativeReducerClass(), job);
 
+    /*
     boolean writeHDFS = true;
     if(job.getOutputKeyClass().equals(GlobalUniqKeyWritable.class)) writeHDFS = false;
+    */
     
-	//result is dump to local fs, reduce output is localkvstate, create local state data files on local fs
-	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + iteration + "." + this.getTaskID().getTaskID().getId());
-    final RecordWriter<OUTKEY, OUTVALUE> localOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
-            reduceOutputCounter, job, reporter, localfilename, false);
-
+    WrappedIndexOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> collector
+		= new WrappedIndexOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(reporter, null);	//now, we skip terminator
+    
+    int taskid = this.getTaskID().getTaskID().getId();
 	String filteredfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/filter-" + iteration + "." + this.getTaskID().getTaskID().getId());
     final RecordWriter<OUTKEY, OUTVALUE> filteredOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
             reduceOutputCounter, job, reporter, filteredfilename, false);
     
-    ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE> resultSet = new ResultFileQueue<INKEY,INVALUE,OUTKEY,OUTVALUE>(iteration, reporter);
-    FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE> collector = new FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(
-    			localOut, filteredOut, reporter, resultSet);
-    
+    Path remotePreservedPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid);
+    Path remotePreservedIndexPath = new Path(job.getPreserveStatePath() + "/preserve-" + taskid + ".index");
+    Path preservedPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
+    Path oldPreservedIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + (iteration-1) + "-" + taskid + ".index");
+	Path newPreserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + iteration + "-" + taskid + ".index");
+	  
+	IFile.PreserveFile<INKEY, INVALUE, SOURCEKEY, OUTVALUE> preserveFile;
+	if(hdfs.exists(remotePreservedPath)){
+		//if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
+		if(!localfs.exists(preservedPath)){
+			hdfs.copyToLocalFile(remotePreservedPath, preservedPath);
+			hdfs.copyToLocalFile(remotePreservedIndexPath, oldPreservedIndexPath);
+			LOG.info("copy remote preserve file " + remotePreservedPath + " to local disk" + preservedPath + "!!!!!!!!! and file size is " + localfs.getFileStatus(preservedPath).getLen());
+		}
+			
+		preserveFile = new IFile.PreserveFile<INKEY, INVALUE, SOURCEKEY, OUTVALUE>(conf, preservedPath,
+				oldPreservedIndexPath, newPreserveIndexPath, keyClass, valueClass, skeyClass, outvalueClass);
+	}else{
+		throw new IOException("acturally, there is no preserve data on the path you" +
+				" have set! Please check the path and check the map task number " + remotePreservedPath);
+	}
+	
+	
+	int nonConvergedItems = 0;
     // apply reduce function
     try {
       //increment processed counter only if skipping feature is enabled
@@ -2700,46 +2875,80 @@ class ReduceTask extends Task {
     	  throw new IOException("should consider skipping case!!!!");
       }
       
-      IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY> values = 
-    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY>(rIter, iteration,
-		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, reducer.removeLable(),
+      IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
+    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
+		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
+		          preserveFile,
+		          reducer.removeLable(),
 		          job, reporter);
       values.informReduceProgress();
       
+      float filter_threshold = conf.getFilterThreshold();
+      
+      long time1 = System.currentTimeMillis();
       while (values.more()) {
         reduceInputKeyCounter.increment(1);
-        reducer.reduce(values.getKey(), values, collector, reporter);
         
+        collector.clearCollectedValue();
+        INKEY key = values.getKey();
+        reducer.reduce(key, values, collector, reporter);
+        OUTVALUE oldvalue = values.getPreservedOutValue();
+        OUTKEY newkey = collector.collectedKey();
+        OUTVALUE newvalue = collector.collectedValue();
+        
+        //update the result key value pair
+        values.updateResKV(key, newvalue);
+        
+        //filter the neglective record, write the filtered records to filteredOut
+		float diff = reducer.distance(newkey, oldvalue, newvalue);
+		
+		//LOG.info("for key " + key + " source file " + largestPri + " diff between " + latestValue + " and " + value + " is " + diff);
+		
+		if(diff >= filter_threshold){
+			//localwriter.write(key, value);
+			filteredOut.write(newkey, newvalue);
+			//LOG.info("collect " + key + "\t" + value + " diff " + diff);
+			nonConvergedItems++;
+		}else{
+			//LOG.info("skip " + key + "\t" + value + " diff " + diff);
+		}
+		
         if(incrProcCount) {
           reporter.incrCounter(SkipBadRecords.COUNTER_GROUP, 
               SkipBadRecords.COUNTER_REDUCE_PROCESSED_GROUPS, 1);
         }
+        
         values.nextKey();
         values.informReduceProgress();
       }
-    	  
+      long time2 = System.currentTimeMillis();
+      
+      System.out.println("iterating the key-value pairs takes " + (time2-time1));
       //for single preserve file
       //values.writeRest();
-      collector.writeRestKVs();
+      //collector.writeRestKVs();
       
       //Clean up: repeated in catch block below
-      localOut.close(reporter);
+      //localOut.close(reporter);
       filteredOut.close(reporter);
-      resultSet.close();
+      //resultSet.close();
       values.close();		//close the k,sk,v writer
       reducer.close();
       
+      boolean writeHDFS = false;
       if(writeHDFS){
     	  FileSystem hdfs = FileSystem.get(job);
-    	  hdfs.copyFromLocalFile(false, new Path(localfilename), 
-    			  new Path(job.get("mapred.output.dir") + "/iteration-" + iteration + "/substate-" + getPartition()));
+    	  hdfs.copyFromLocalFile(false, preservedPath, remotePreservedPath);
+    	  hdfs.copyFromLocalFile(false, newPreserveIndexPath, remotePreservedIndexPath);
       }
 
+      /*
       //if global data, need to send to jobtracker, then the jobtracker will combine them
       if(job.getGlobalUniqValuePath() != null) {
     	  LOG.info("send global data to jobtracker!");
     	  sendGlobalData(job, localfilename, reporter);
       }
+      */
       
       //End of clean up.
     } catch (IOException ioe) {
@@ -2748,22 +2957,21 @@ class ReduceTask extends Task {
       } catch (IOException ignored) {}
         
       try {
-          localOut.close(reporter);
+          //localOut.close(reporter);
+    	  filteredOut.close(reporter);
       } catch (IOException ignored) {}
       
       throw ioe;
     }
 
     long taskend = new Date().getTime();
-    
     //report iterative task information
     IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), iteration, 
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reduceInputKeyCounter.getCounter());
     event.setRunTime(taskend - taskstart);
-    int nonconvitems = ((FilterOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>)collector).getNonConvergedItems();
-    LOG.info("iteration " + iteration + " non converged items number is " + nonconvitems);
-    event.setSubDistance(nonconvitems);
+    LOG.info("iteration " + iteration + " non converged items number is " + nonConvergedItems);
+    event.setSubDistance(nonConvergedItems);
     
 	try {
 		umbilical.iterativeTaskComplete(event);
@@ -4715,7 +4923,7 @@ class ReduceTask extends Task {
           final RawKeyValueIterator rIter = Merger.merge(job, fs,
               keyClass, valueClass, memDiskSegments, numMemDiskSegments,
               tmpDir, comparator, reporter, spilledRecordsCounter, null);
-          final Writer writer = new Writer(job, fs, outputPath,
+          final IFile.Writer writer = new IFile.Writer(job, fs, outputPath,
               keyClass, valueClass, codec, null);
           try {
             Merger.writeFile(rIter, writer, reporter, job);
@@ -5228,8 +5436,8 @@ class ReduceTask extends Task {
               lDirAlloc.getLocalPathForWrite(mapFiles.get(0).toString(), 
                                              approxOutputSize, conf)
               .suffix(".merged");
-            Writer writer = 
-              new Writer(conf,rfs, outputPath, 
+            IFile.Writer writer = 
+              new IFile.Writer(conf,rfs, outputPath, 
                          conf.getMapOutputKeyClass(), 
                          conf.getMapOutputValueClass(),
                          codec, null);
@@ -5330,8 +5538,8 @@ class ReduceTask extends Task {
         Path outputPath =
             mapOutputFile.getInputFileForWrite(mapId, mergeOutputSize);
 
-        Writer writer = 
-          new Writer(conf, rfs, outputPath,
+        IFile.Writer writer = 
+          new IFile.Writer(conf, rfs, outputPath,
                      conf.getMapOutputKeyClass(),
                      conf.getMapOutputValueClass(),
                      codec, null);
