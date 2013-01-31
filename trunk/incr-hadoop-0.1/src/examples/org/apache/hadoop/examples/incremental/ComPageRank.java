@@ -365,7 +365,7 @@ public class ComPageRank {
 
 	    	long iterend = System.currentTimeMillis();
 	    	itertime += (iterend - iterstart) / 1000;
-	    	Util.writeLog("iter.pagerank.log", "iteration computation " + iteration + " takes " + itertime + " s");
+	    	Util.writeLog("comp.pagerank.log", "iteration computation " + iteration + " takes " + itertime + " s");
 	    	
 	    	iteration++;
 	    }

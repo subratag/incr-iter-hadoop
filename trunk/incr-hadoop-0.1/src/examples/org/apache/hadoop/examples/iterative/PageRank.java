@@ -90,8 +90,8 @@ public class PageRank {
 			String outputv = "";
 
 			while(values.hasNext()){
-				String ends = values.next().toString();
-				/*
+				String end = values.next().toString();
+				
 				if(key.get() == Long.parseLong(end)){
 					int randlong = rand.nextInt(Integer.MAX_VALUE);
 					while(randlong == Long.parseLong(end)){
@@ -101,12 +101,12 @@ public class PageRank {
 				}else{
 					outputv += end + " ";
 				}
-				*/
-				outputv += ends;
+				
+				//outputv += ends + " ";
 			}
 			
 			output.collect(key, new Text(outputv));
-			//System.out.println("output " + outputv);
+			//System.out.println("output " + key + "\t" + outputv);
 		}
 	}
 	
@@ -319,7 +319,7 @@ public class PageRank {
 		    job.setIterative(true);
 		    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
 		    job.setIterationNum(iteration);					//iteration number
-		    job.setCheckPointInterval(interval);					//checkpoint interval
+		    job.setCheckPointInterval(interval);			//checkpoint interval
 		    if(iteration > 1){
 		    	job.setDynamicDataPath(output + "/iteration-" + (iteration-1));				//init by file, if not set init by API
 		    }

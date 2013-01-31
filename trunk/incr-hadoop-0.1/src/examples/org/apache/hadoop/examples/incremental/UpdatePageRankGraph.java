@@ -89,37 +89,37 @@ public class UpdatePageRankGraph {
 			//System.out.println("input: " + key + "\t" + outputv);
 			
 			if(deletelist.contains(key.get())){
-				System.out.println(key + "\t" + outputv + "\t-");
+				//System.out.println(key + "\t" + outputv + "\t-");
 				writer.append(key, new Text(outputv), new Text("-"));
 				return;
 			}
 			
 			//randomlly change the linklist
-			if(rand.nextDouble() < changepercent && outputv.indexOf("0 ") == -1){
+			if(rand.nextDouble() < changepercent /*&& outputv.indexOf("0 ") == -1*/){
 				//boolean change_type = rand.nextBoolean();		//update or add
 				boolean change_type = true;
 				
 				if(change_type){
 					//update
 					writer.append(key, new Text(outputv), new Text("-"));
-					System.out.println(key + "\t" + outputv + "\t-");
+					//System.out.println(key + "\t" + outputv + "\t-");
 					
-					/*
+					
 					int randend = rand.nextInt(totalnum);
 					while(randend == key.get()){
 						randend = rand.nextInt(totalnum);
 					}
-					*/
+					
 					
 					//write to the new structure file
-					//outputv += randend;
-					outputv += "27";
+					outputv += randend;
+					//outputv += "27";
 					
 					output.collect(key, new Text(outputv));
 					
 					//write to the delta file
 					writer.append(key, new Text(outputv), new Text("+"));
-					System.out.println(key + "\t" + outputv + "\t+");
+					//System.out.println(key + "\t" + outputv + "\t+");
 				}else{
 					//add
 					addpages++;
