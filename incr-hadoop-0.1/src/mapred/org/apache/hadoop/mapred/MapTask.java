@@ -892,12 +892,11 @@ class MapTask extends Task {
 				//no state data on hdfs
 				if(job.getCheckPointInterval() != 1)
 					throw new IOException("no local dynamic data " + localStatePath);
-				
+			
 				//have state data on hdfs
-				String outputDir = job.get("mapred.output.dir");
-				String lastOutputDir = outputDir.substring(0, outputDir.indexOf("-")) + "-" + (job.getIterationNum() - 1);
-				Path remoteStatePath = new Path(lastOutputDir + "/" + getOutputName(getTaskID().getTaskID().getId()));
+				Path remoteStatePath = new Path(job.getDynamicDataPath() + "/" + getOutputName(getTaskID().getTaskID().getId()));
 				hdfs.copyToLocalFile(remoteStatePath, localStatePath);
+				
 				LOG.info("copy remote state file " + remoteStatePath + " to local disk" + localStatePath + "!!!!!!!!!");
 			}
 			
