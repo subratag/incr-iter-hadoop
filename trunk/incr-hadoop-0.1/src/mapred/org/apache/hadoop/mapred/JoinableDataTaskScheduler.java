@@ -208,7 +208,8 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
 		          
 		          
 		          //this is the first job of the series of jobs
-		          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) && job.getJobConf().isIterative()){
+		          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) 
+		        		  && (job.getJobConf().isIterative() || job.getJobConf().isPreserve())){
 		        	  LOG.info(job.getJobID() + " is the first iteration job");
 		        	  newIterationJob = true;
 		          }
