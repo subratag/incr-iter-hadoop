@@ -893,6 +893,7 @@ class MapTask extends Task {
 				if(job.getCheckPointInterval() != 1)
 					throw new IOException("no local dynamic data " + localStatePath);
 			
+				LOG.info("this is a new version, 3.18");
 				//have state data on hdfs
 				Path remoteStatePath = new Path(job.getDynamicDataPath() + "/" + getOutputName(getTaskID().getTaskID().getId()));
 				hdfs.copyToLocalFile(remoteStatePath, localStatePath);
