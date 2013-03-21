@@ -370,6 +370,7 @@ public class PageRank {
 	    job2.setIterationNum(iteration);					//iteration numbe
 	    job2.setCheckPointInterval(interval);					//checkpoint interval
 	    job2.setStaticDataPath(output + "/substatic");
+	    job2.setDynamicDataPath(output + "/iteration-" + (iteration-1));	
 	    job2.setStaticInputFormat(SequenceFileInputFormat.class);
 	    job2.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
     	job2.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this

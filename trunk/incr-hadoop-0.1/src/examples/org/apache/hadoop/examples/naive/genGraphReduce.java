@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Random;
 
 import jsc.distributions.Lognormal;
@@ -24,12 +25,13 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.examples.incremental.Util;
 
 
-public class genGraphMap extends MapReduceBase implements
-		Mapper<LongWritable, Text, IntWritable, Text> {
+public class genGraphReduce extends MapReduceBase implements
+		Reducer<LongWritable, Text, IntWritable, Text> {
 
 	private int argument;
 	private int capacity;
@@ -106,7 +108,7 @@ public class genGraphMap extends MapReduceBase implements
 	}
 	
 	@Override
-	public void map(LongWritable key, Text value,
+	public void reduce(LongWritable key, Iterator<Text> values,
 			OutputCollector<IntWritable, Text> output, Reporter reporter)
 			throws IOException {
 		
@@ -353,5 +355,6 @@ public class genGraphMap extends MapReduceBase implements
 			done = true;
 		}
 	}
+
 
 }
