@@ -237,7 +237,7 @@ public class IncrPageRank {
 
 	    job.setStaticDataPath(updateStatic);				//the new static data
 	    job.setPreserveStatePath(preserveState);		// the preserve map/reduce output path
-	    job.setDynamicDataPath(output + "/incriter");				// the dynamic data path
+	    job.setDynamicDataPath(output + "/incrstart");				// the dynamic data path
 	    job.setIncrOutputPath(output);
 	    
 	    job.setStaticInputFormat(SequenceFileInputFormat.class);
