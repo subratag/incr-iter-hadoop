@@ -491,6 +491,11 @@ public class IFile {
       		this.offset = offset;
       		this.length = length;
       	}
+      	
+      	@Override
+      	public String toString(){
+      		return "index entry: " + offset + "\t" + length;
+      	}
     }
     
     // Count records read from disk
@@ -983,6 +988,12 @@ public class IFile {
           System.arraycopy(source, dataIn.getPosition(), 
               destination, 0, bytesRemaining);
         }
+        
+        /*
+        Log.info("dataIn.getLength() " + dataIn.getLength() + " dataIn.getPosition() " + dataIn.getPosition() 
+        		+ " remaining: " + bytesRemaining + " (destination.length - bytesRemaining) " + 
+        		(destination.length - bytesRemaining));
+        */
         
         // Read as much data as will fit from the underlying stream 
         int n = readData(destination, bytesRemaining, 

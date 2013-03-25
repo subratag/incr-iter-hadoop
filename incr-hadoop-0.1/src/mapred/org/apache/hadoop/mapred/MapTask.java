@@ -1499,9 +1499,10 @@ class MapTask extends Task {
 				//this may happen when speculative execution enabled
 				if(!localfs.exists(localDynamicPath)){
 					//if(iteration == -1){
+					if(job.isIncrementalIterative()) throw new RuntimeException("this is impossible! we should not restart a new task on other machines!");
 						//if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
-						hdfs.copyToLocalFile(remoteDynamicPath, localDynamicPath);
-						LOG.info("copy remote state file " + remoteDynamicPath + " to local disk" + localDynamicPath + "!!!!!!!!!");
+					hdfs.copyToLocalFile(remoteDynamicPath, localDynamicPath);
+					LOG.info("copy remote state file " + remoteDynamicPath + " to local disk" + localDynamicPath + "!!!!!!!!!");
 				
 				}/*	else{
 						//may happen when speculative execution
@@ -1542,14 +1543,14 @@ class MapTask extends Task {
 		Path remoteDynamicPath = new Path(job.getDynamicDataPath() + "/" + getOutputName(getTaskID().getTaskID().getId()));
 		Path localDynamicPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/filter-" + iteration + "." + this.getTaskID().getTaskID().getId());
 
-		//if(hdfs.exists(remoteDynamicPath)){
+		if(hdfs.exists(remoteDynamicPath)){
 			//this may happen when speculative execution enabled
 			if(!localfs.exists(localDynamicPath)){
 				//if(iteration == -1){
 					//if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
-					//hdfs.copyToLocalFile(remoteDynamicPath, localDynamicPath);
-					//LOG.info("copy remote state file " + remoteDynamicPath + " to local disk" + localDynamicPath + "!!!!!!!!!");
-				throw new RuntimeException("no file " + localDynamicPath + " found");
+					hdfs.copyToLocalFile(remoteDynamicPath, localDynamicPath);
+					LOG.info("copy remote state file " + remoteDynamicPath + " to local disk" + localDynamicPath + "!!!!!!!!!");
+				//throw new RuntimeException("no file " + localDynamicPath + " found");
 			}
 			
 			//load state data
@@ -1557,10 +1558,10 @@ class MapTask extends Task {
 			
 			InputSplit inputSplit = new FileSplit(localDynamicPath, 0, statefilelen, null, true);
 			dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
-		//}else{
-			//throw new IOException("acturally, there is no static data on the path you" +
-			//		" have set! Please check the path and check the map task number " + remoteDynamicPath);
-		//}
+		}else{
+			throw new IOException("acturally, there is no state data on the path you" +
+					" have set! Please check the path and check the map task number " + remoteDynamicPath);
+		}
 		
 		LOG.info("processing dynamic data file " + localDynamicPath);
 		

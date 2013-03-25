@@ -189,19 +189,21 @@ class ReduceTask extends Task {
 								completeIterationTasks.put(iteration, completedIterations);
 							}
 							
-							if(!completeIterationTasks.get(iteration).contains(mapTaskId)){
-								completeIterationTasks.get(iteration).add(mapTaskId);
-							}
-							
-							LOG.info("!!!task " + iteration + ":" + mapTaskId + " is completed! completed: " + 
-									completeIterationTasks.get(iteration).size() + " total: " + numMaps);
-							
-							synchronized(reducetask){
-								if(iteration > completedIterationIndex && completeIterationTasks.get(iteration).size() >= numMaps){
-									LOG.info("have finished all for iteration " + iteration);
-									completedIterationIndex = iteration;
-									finishedMapTasks.clear();
-									reducetask.notifyAll();
+							if(iteration > completedIterationIndex){
+								LOG.info("!!!task " + iteration + ":" + mapTaskId + " is completed! completed: " + 
+										completeIterationTasks.get(iteration).size() + " total: " + numMaps);
+								
+								if(!completeIterationTasks.get(iteration).contains(mapTaskId)){
+									completeIterationTasks.get(iteration).add(mapTaskId);
+								}
+								
+								synchronized(reducetask){
+									if(iteration > completedIterationIndex && completeIterationTasks.get(iteration).size() >= numMaps){
+										LOG.info("have finished all map for iteration " + iteration);
+										completedIterationIndex = iteration;
+										finishedMapTasks.clear();
+										reducetask.notifyAll();
+									}
 								}
 							}
 						}
@@ -1683,8 +1685,7 @@ class ReduceTask extends Task {
       if(onhdfs){
     	  //for hdfs reduce output
           FileSystem fs = FileSystem.get(job);
-          this.real = job.getOutputFormat().getRecordWriter(fs, job, finalName,
-              reporter);
+          this.real = job.getOutputFormat().getRecordWriter(fs, job, finalName, reporter);
       }else{
     	  //for local reduce output
     	  /*
@@ -2762,13 +2763,17 @@ class ReduceTask extends Task {
       values.close();		//close the k,sk,v writer
       reducer.close();
       
-      boolean writeHDFS = false;
+      boolean writeHDFS = true;
       if(writeHDFS){
     	  FileSystem hdfs = FileSystem.get(job);
+    	  this.localfs.delete(new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/.preserve-" + taskid + ".crc"));
     	  hdfs.copyFromLocalFile(false, preservedPath, remotePreservedPath);
     	  hdfs.copyFromLocalFile(false, newPreserveIndexPath, remotePreservedIndexPath);
+    	  hdfs.copyFromLocalFile(false, new Path(filteredfilename), 
+    			  new Path(job.get("mapred.output.dir") + "/" + getOutputName(getPartition())));
       }
 
+      
       /*
       //if global data, need to send to jobtracker, then the jobtracker will combine them
       if(job.getGlobalUniqValuePath() != null) {
