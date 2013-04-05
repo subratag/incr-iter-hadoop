@@ -1213,6 +1213,7 @@ class MapTask extends Task {
 			boolean dynamicmore = dynamicReader.next(dynamickeyObject, dynamicvalObject);
 			if(!dynamicmore) throw new RuntimeException("no more data in the dynamic data file!!! " + job.getDynamicDataPath());
 
+			int matches = 0;
 			while(deltaStaticReader.next(skeybuffer, svaluebuffer, changebuffer)){
 				deltakeyDeserializer.open(skeybuffer);
 				deltavalDeserializer.open(svaluebuffer);
@@ -1223,12 +1224,17 @@ class MapTask extends Task {
 				
 				DK projectedDynamicKey = projector.project(deltaStatickeyObject);
 				
-				LOG.info("delta read: " + deltaStatickeyObject + "\t" + deltaStaticvalObject + "\t" + changeType);
+				//LOG.info("delta read: " + deltaStatickeyObject + "\t" + deltaStaticvalObject + "\t" + changeType);
 				
+				boolean ret = false;
 				while(!projectedDynamicKey.equals(dynamickeyObject)){
-					dynamicReader.next(dynamickeyObject, dynamicvalObject);
+					ret = dynamicReader.next(dynamickeyObject, dynamicvalObject);
 					//LOG.info("dynamic data read: " + dynamickeyObject + "\t" + dynamicvalObject);
+					
+					if(!ret) break;
 				}
+				
+				if(ret) matches++;
 				
 				output.setSourceKey(deltaStatickeyObject);
 				if(changeType.toString().equals("+")){
@@ -1238,6 +1244,9 @@ class MapTask extends Task {
 				}
 				mapper.map(deltaStatickeyObject, deltaStaticvalObject, dynamicvalObject, output, reporter);
 			}
+			
+			if(matches == 0) throw new RuntimeException("partitions do not match! no key matched!!!");
+			
 		}else if(joinType == Projector.Type.ONE2ALL){
 	
 		}else if(joinType == Projector.Type.ONE2MUL){
@@ -1258,6 +1267,7 @@ class MapTask extends Task {
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
+    LOG.info("task completion report!");
     
 	try {
 		umbilical.iterativeTaskComplete(event);

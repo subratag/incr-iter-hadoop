@@ -909,7 +909,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
           jobCopy.setNumMapTasks(maps);
           
           //if the data distribution job, redetermine the number of static data parttiions, i.e., the reduce tasks
-          if(job.isDataDistribution()){
+          if(job.isDataDistribution() || job.isIncrementalStart() ){
         	  long blocksize = job.getLong("dfs.block.size", 64*1024*1024);
 
         	  //decide how many reducers should be in the following normal iteration jobs
@@ -953,7 +953,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
         	  jobCopy.setPartitionerClass(StaticDataPartitioner.class);				
           }
           
-          if(job.isIterative() || job.isPreserve()){
+          if(job.isIterative() || job.isPreserve() || job.isIncrementalStart() || job.isIncrementalIterative()){
         	  Projector projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
         	  Projector.Type joinType = projector.getProjectType();
 

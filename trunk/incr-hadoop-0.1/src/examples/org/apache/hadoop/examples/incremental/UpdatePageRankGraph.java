@@ -204,7 +204,7 @@ public class UpdatePageRankGraph {
 	    JobClient.runJob(job0);
 	    
 	    long initend = System.currentTimeMillis();
-		Util.writeLog("incr.pagerank.log", "update job use " + (initend - initstart)/1000 + " s");
+		//Util.writeLog("incr.pagerank.log", "update job use " + (initend - initstart)/1000 + " s");
 		
 		return 0;
 	}
