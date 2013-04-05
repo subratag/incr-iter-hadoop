@@ -1569,6 +1569,8 @@ class ReduceTask extends Task {
     }
     //the special case, for the case that is incremental iterative app, we use a single job
     else{
+    	long incrstarttime = System.currentTimeMillis();
+    	
     	//create a new thread to control when to start
 		MapOutputReadyChecker mapchecker = new MapOutputReadyChecker(umbilical, this);
 		mapchecker.setDaemon(true);
@@ -1646,7 +1648,7 @@ class ReduceTask extends Task {
 	        	}
 	        	*/
 	        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, comparator, 
-	                        keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass());
+	                        keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass(), incrstarttime);
 	        	
 	        	long time4 = System.currentTimeMillis();
 	        	
@@ -2839,7 +2841,8 @@ class ReduceTask extends Task {
                      Class<INKEY> keyClass,
                      Class<INVALUE> valueClass,
                      Class<SOURCEKEY> skeyClass,
-                     Class<OUTVALUE> outvalueClass) throws IOException {
+                     Class<OUTVALUE> outvalueClass,
+                     long starttime) throws IOException {
 	  
 	long taskstart = new Date().getTime();
 	
@@ -2904,6 +2907,7 @@ class ReduceTask extends Task {
       float filter_threshold = conf.getFilterThreshold();
       
       long time1 = System.currentTimeMillis();
+      int processed = 0;
       while (values.more()) {
         reduceInputKeyCounter.increment(1);
         
@@ -2935,13 +2939,14 @@ class ReduceTask extends Task {
           reporter.incrCounter(SkipBadRecords.COUNTER_GROUP, 
               SkipBadRecords.COUNTER_REDUCE_PROCESSED_GROUPS, 1);
         }
+        processed++;
         
         values.nextKey();
         values.informReduceProgress();
       }
       long time2 = System.currentTimeMillis();
       
-      System.out.println("iterating the key-value pairs takes " + (time2-time1));
+      LOG.info("iteration " + iteration + " iterating " + processed + " key-value pairs takes " + (time2-time1) + " total " + (time2-starttime));
       //for single preserve file
       //values.writeRest();
       //collector.writeRestKVs();
