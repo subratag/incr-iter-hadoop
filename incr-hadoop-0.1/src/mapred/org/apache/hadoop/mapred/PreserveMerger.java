@@ -467,7 +467,9 @@ class PreserveMerger {
             // this helps in ensuring we don't use buffers until we need them
             segment.init(readsCounter);
             long startPos = segment.getPosition();
+            LOG.info("read segment " + segment);
             boolean hasNext = segment.next();
+            LOG.info("read " + key + "\t" + value);
             long endPos = segment.getPosition();
             startBytes += endPos - startPos;
             

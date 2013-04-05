@@ -67,10 +67,12 @@ public class IncrPageRank {
 		IterativeReducer<LongWritable, FloatWritable, LongWritable, FloatWritable> {
 	
 		private long starttime;
+		private int iteration;
 		
 		@Override
 		public void configure(JobConf job){
 			starttime = job.getLong("starttime", 0);
+			iteration = 0;
 			//System.out.println("start new");
 		}
 		
@@ -111,7 +113,8 @@ public class IncrPageRank {
 
 		@Override
 		public void close(){
-			System.out.println("now " + System.currentTimeMillis() + " past " + (System.currentTimeMillis()-starttime));
+			iteration++;
+			System.out.println("iteration " + iteration + " now " + System.currentTimeMillis() + " past " + (System.currentTimeMillis()-starttime));
 		}
 	}
 
@@ -266,7 +269,7 @@ public class IncrPageRank {
 
     	long iterend = System.currentTimeMillis();
     	itertime += (iterend - iterstart) / 1000;
-    	Util.writeLog("incr.pagerank.log", "iteration computation " + iteration + " takes " + itertime + " s");
+    	Util.writeLog("incr.pagerank.log", "iteration computation takes " + itertime + " s");
     	
     	iteration++;
 	    

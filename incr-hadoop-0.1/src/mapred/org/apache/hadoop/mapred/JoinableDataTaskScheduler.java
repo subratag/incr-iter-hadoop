@@ -168,7 +168,6 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
 	    
 	    int numLocalMaps = 0;
 	    int numNonLocalMaps = 0;
-	    boolean newIterationJob = false;
 	    scheduleMaps:
 	    for (int i=0; i < availableMapSlots; ++i) {
 	      synchronized (jobQueue) {
@@ -178,313 +177,23 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
 	          }
 
 	          if(job.getJobConf().isIterative()){
-
-	        	  String iterativeAppID = job.getJobConf().getIterativeAlgorithmID();
-		          
-	        	  if(iterativeAppID.equals("none")){
-	        		  throw new IOException("please specify the iteration ID!");
+	        	  int res = assignMapForIterative(taskTracker, job, numTaskTrackers, taskTrackerStatus, 
+	        			  exceededMapPadding, assignedTasks);
+	        	  if(res == -1){
+	        		  break;
+	        	  }else if(res == 1){
+	        		  break scheduleMaps;
 	        	  }
-
-	        	  String jointype = job.getJobConf().get("mapred.iterative.jointype");
-	        	  
-	        	//prepare the iterationid map and jobtask map
-		          if(!this.tracker_mtask_map.containsKey(iterativeAppID)){
-		        	  //a new iterative algorithm
-		        	  Map<String, LinkedList<Integer>> new_tracker_task_map = new HashMap<String, LinkedList<Integer>>();
-		        	  this.tracker_mtask_map.put(iterativeAppID, new_tracker_task_map);
-		        	  
-		        	  Map<String, LinkedList<Integer>> new_tracker_rtask_map = new HashMap<String, LinkedList<Integer>>();
-		        	  this.tracker_rtask_map.put(iterativeAppID, new_tracker_rtask_map);
-		        	  
-		        	  //record the first job of the series of jobs in the iterations
-		        	  this.first_job_map.put(iterativeAppID, job.getJobID());
-		        	  
-		        	  //record the list of jobs for a iteration
-		        	  HashSet<JobID> jobs = new HashSet<JobID>();
-		        	  jobs.add(job.getJobID());
-		        	  this.iteration_jobs_map.put(iterativeAppID, jobs);
-		          }
-		          
-		          
-		          
-		          //this is the first job of the series of jobs
-		          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) 
-		        		  && (job.getJobConf().isIterative() || job.getJobConf().isPreserve())){
-		        	  LOG.info(job.getJobID() + " is the first iteration job");
-		        	  newIterationJob = true;
-		          }
-		          
-	        	  
-		          //this is one of the following jobs, and prepare a assignment list for the assignment
-		          if(!newIterationJob){
-		        	  LOG.info(job.getJobID() + " is not the first iteration job");
-		        	  this.iteration_jobs_map.get(iterativeAppID).add(job.getJobID());
-		        	  
-		        	  if(this.mtask_assign_map.get(job.getJobID()) == null){
-			        	  //prepare the map task assignment list
-		        		  LOG.info("for job " + job.getJobID() + "'s assignment:");
-			        	  Map<String, LinkedList<Integer>> map_task_assign = new HashMap<String, LinkedList<Integer>>();
-			        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_mtask_map.get(iterativeAppID).entrySet()){
-			        		  String tracker = entry.getKey();
-			        		  LinkedList<Integer> taskids = entry.getValue();
-			        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
-			        		  LOG.info("assign on tracker " + tracker);
-			        		  for(int taskid : taskids){
-			        			  copytaskids.add(taskid);
-			        			  LOG.info("task id " + taskid);
-			        		  }
-			        		  map_task_assign.put(tracker, copytaskids);
-			        	  }
-			        	  this.mtask_assign_map.put(job.getJobID(), map_task_assign);
-			        	  
-			        	  //if one2one copy the map assign to reduce assign, the are with the same mapping
-			        	  if(jointype.equals("one2one")){
-				        	  //prepare the reduce task assignment list
-				        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
-				        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_mtask_map.get(iterativeAppID).entrySet()){
-				        		  String tracker = entry.getKey();
-				        		  LinkedList<Integer> taskids = entry.getValue();
-				        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
-				        		  for(int taskid : taskids){
-				        			  copytaskids.add(taskid);
-				        		  }
-				        		  reduce_task_assign.put(tracker, copytaskids);
-				        	  }
-				        	  this.tracker_rtask_map.put(iterativeAppID, reduce_task_assign);
-			        	  }
-			        	  
-			        	  
-			        	  //prepare the reduce task assignment list for all cases
-			        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
-			        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_rtask_map.get(iterativeAppID).entrySet()){
-			        		  String tracker = entry.getKey();
-			        		  LinkedList<Integer> taskids = entry.getValue();
-			        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
-			        		  for(int taskid : taskids){
-			        			  copytaskids.add(taskid);
-			        		  }
-			        		  reduce_task_assign.put(tracker, copytaskids);
-			        	  }
-			        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
-			        	  
-		        	  }
-
-		          }
-		          
-		          Task t = null;
-		          
-		          //the first iteration or following iteration
-		          //if the first iteration: assign taskid by default (exception for the one2mul case, where we assign staring from 0,...,n)
-		          //else if the following iterations: assign taskid based on the first iteration assignment
-		          if(newIterationJob){	
-		        	  
-		        	  /**
-		        	   * the one2mul case should be carefully taken care, we want to assgin map0,map1,map2 and reduce0 to a tracker,
-		        	   * and assign map3,map4,map5 and reduce1 to another tracker
-		        	   */
-		        	  if(jointype.equals("one2mul") && !tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
-		        		  
-		        		  //if contain the tracker, that means we have assigned tasks for this tracker
-		   
-		        		  int scala = job.getJobConf().getInt("mapred.iterative.data.scala", 1);
-	        			  //int mapsEachTracker = job.getJobConf().getNumMapTasks() / numTaskTrackers;
-	        			  int reducersEachTracker = job.getJobConf().getNumReduceTasks() / numTaskTrackers;
-	        			  if(job.getJobConf().getNumReduceTasks() % numTaskTrackers != 0)
-	        				  throw new IOException("job.getJobConf().getNumReduceTasks() % numTaskTrackers != 0");
-	        			  
-	  			          if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
-	  			        	  LinkedList<Integer> tasklist = new LinkedList<Integer>();
-	  			        	  this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
-				          }
-	  			          if(!this.tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
-	  			        	  LinkedList<Integer> tasklist = new LinkedList<Integer>();
-	  			        	  this.tracker_rtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
-				          }
-	  			          
-	  			          //for debugging
-	        			  String debugout1 = "maps: ";
-	        			  String debugout2 = "reduces: ";
-	        			  
-    					  int reduceOffsetId = (tracker_rtask_map.get(iterativeAppID).size()-1) * reducersEachTracker; //the start reduce id
-    					  
-    					  for(int count = 0; count < reducersEachTracker; count++){
-    						  int reducepartitionid = reduceOffsetId + count;
-        					  debugout2 += reducepartitionid + " ";
-        					  tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(reducepartitionid);
-        					  
-        					  for(int count2=0; count2<scala; count2++){
-        						  int mappartitionid = reducepartitionid*scala + count2;
-        						  //int mapid = job.splitTaskMap.get(mappartitionid);
-        						  debugout1 += mappartitionid + " ";
-        						  this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(mappartitionid);
-        					  }
-    					  }
-    					  
-        				  //print out for debug
-        				  LOG.info("tracker " + taskTracker.getTrackerName() + " assigned tasks " + debugout1 + " and " + debugout2);
-		        		  
-        				  //make the assignment list
-		        		  String tracker = taskTracker.getTrackerName();
-		        		  LinkedList<Integer> mtaskids = this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName());
-		        		  LinkedList<Integer> mcopytaskids = new LinkedList<Integer>();
-		        		  for(int taskid : mtaskids){
-		        			  mcopytaskids.add(taskid);
-		        		  }
-		        		  if(!mtask_assign_map.containsKey(job.getJobID())){
-			        		  Map<String, LinkedList<Integer>> map_task_assign = new HashMap<String, LinkedList<Integer>>();
-				        	  this.mtask_assign_map.put(job.getJobID(), map_task_assign);
-		        		  }
-		        		  this.mtask_assign_map.get(job.getJobID()).put(tracker, mcopytaskids);
-		        		  
-			        	  //prepare the reduce task assignment list
-		        		  LinkedList<Integer> rtaskids = this.tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName());
-		        		  LinkedList<Integer> rcopytaskids = new LinkedList<Integer>();
-		        		  for(int taskid : rtaskids){
-		        			  rcopytaskids.add(taskid);
-		        		  }
-		        		  if(!rtask_assign_map.containsKey(job.getJobID())){
-			        		  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
-				        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
-		        		  }
-			        	  this.rtask_assign_map.get(job.getJobID()).put(tracker, rcopytaskids);
-			        	  
-        				  //assign a map task for this tracker
-    		        	  Integer target = null;
-    		        	  try{
-    		        		  target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
-    		        	  }catch (Exception e){
-    		        		  e.printStackTrace();
-    		        	  }
-    		        	  
-    		        	  if(target == null){
-    		        		  //all have been assigned, no more work, maybe it should help others to process
-    		        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
-    		        		  break;
-    		        	  }else{
-    				          t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
-    					                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
-    		        	  }
-    		        	  
-		        	  }else{
-		        		  t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
-					                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts()); 
-		        	  }
-		        	  
-		          }else{
-		        	  Integer target = null;
-		        	  try{
-		        		  target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
-		        	  }catch (Exception e){
-		        		  e.printStackTrace();
-		        	  }
-		        	  
-		        	  if(target == null){
-		        		  //all have been assigned, no more work, maybe it should help others to process
-		        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
-		        		  break;
-		        	  }else{
-				          t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
-					                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
-		        	  }
-		          }
-		          
-
-		          if (t != null) {
-		            assignedTasks.add(t);
-		            ++numLocalMaps;
-		            
-		            //new iteration job and the first task for a tasktracker
-		            //for one2mul case, we don't need to record the assignment, since we already made the assignment list beforehand
-		            if(!newIterationJob || jointype.equals("one2mul")){
-		            	//poll, remove
-		            	this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
-		            	LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
-		            }else{
-		            	//record the assignment list for map tasks
-			            if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
-			            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
-			            	this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
-			            }
-			            
-			            this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
-		            
-
-			            //prepare the reduce assignment, for mapping with reduce
-			            if(jointype.equals("one2one")){
-				            //prepare the reduce assignment, for mapping with reduce
-		        		    if(!first_job_reduces_map.containsKey(iterativeAppID)){
-		        		    	Map<String, LinkedList<Integer>> tracker_reduce_map = new HashMap<String, LinkedList<Integer>>();
-		        		    	first_job_reduces_map.put(iterativeAppID, tracker_reduce_map);
-		        		    }
-		        		  
-		        		    if(!first_job_reduces_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
-		        			    LinkedList<Integer> reduces = new LinkedList<Integer>();
-		        			    first_job_reduces_map.get(iterativeAppID).put(taskTracker.getTrackerName(), reduces);
-		        		    }
-		        		   
-		        		    first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
-			            }
-  
-			            LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
-		            }
-
-
-		            // Don't assign map tasks to the hilt!
-		            // Leave some free slots in the cluster for future task-failures,
-		            // speculative tasks etc. beyond the highest priority job
-		            if (exceededMapPadding) {
-		              break scheduleMaps;
-		            }
-		           
-		            // Try all jobs again for the next Map task 
-		            break;
-		          }
-		          
-		          LOG.error("New Node Or Rack Local Map Task failed!");
-		          
-		          
-		          if(newIterationJob){
-		        	// Try to schedule a node-local or rack-local Map task
-			          t = job.obtainNewNonLocalMapTask(taskTrackerStatus, numTaskTrackers,
-			  	                                   taskTrackerManager.getNumberOfUniqueHosts());
-		          }else{
-		        	  Integer target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
-		        	  
-		        	  if(target == null){
-		        		  //all have been assigned, no more work, maybe it should help others to process
-		        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
-		        		  break;
-		        	  }else{
-				          t = job.obtainNewNonLocalMapTask(taskTrackerStatus, numTaskTrackers, 
-				        		  taskTrackerManager.getNumberOfUniqueHosts(), target);
-		        	  }
-		          }
-
-		          
-		          if (t != null) {
-		            assignedTasks.add(t);
-		            ++numNonLocalMaps;
-		            
-		            //new iteration job and the first task for a tasktracker
-		            if(newIterationJob){
-			            if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
-			            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
-			            	this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
-			            }
-			            
-			            this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
-		            }else{
-		            	//poll, remove
-		            	this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
-		            }
-		            
-		            // We assign at most 1 off-switch or speculative task
-		            // This is to prevent TaskTrackers from stealing local-tasks
-		            // from other TaskTrackers.
-		            break scheduleMaps;
-		          }
+	          }else if(job.getJobConf().isIncrementalStart() || job.getJobConf().isIncrementalIterative()){
+	        	  int res = assignMapForIncremental(taskTracker, job, numTaskTrackers, taskTrackerStatus, 
+	        			  exceededMapPadding, assignedTasks);
+	        	  if(res == -1){
+	        		  break;
+	        	  }else if(res == 1){
+	        		  break scheduleMaps;
+	        	  }
 	          }else{
-	        	//not an iterative algorithm, normal schedule
+	        	//not an iterative or incremental algorithm, normal schedule
 	        	  Task t = null;
 	              
 	              // Try to schedule a node-local or rack-local Map task
@@ -556,140 +265,21 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
 	          Task t = null;
 
 	          if(job.getJobConf().isIterative()){
-	        	  String iterativeAppID = job.getJobConf().getIterativeAlgorithmID();
-	        	  if(iterativeAppID.equals("none")){
-	        		  throw new IOException("please specify the iteration ID!");
-	        	  }
-	        	  
-	        	  String jointype = job.getJobConf().get("mapred.iterative.jointype");
-	        	  
-	        	  if(jointype.equals("one2one")){
-	        		  //one-to-one or one-to-mul jobs
-	        		  
-			          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) && job.getJobConf().isIterative()){
-			        	  LOG.info(job.getJobID() + " is the first iteration job for reduce");
-			        	  newIterationJob = true;
-			          }
-			          
-		        	  Integer target = null;
-		        	  if(newIterationJob){
-		        		  
-		        		  if(first_job_reduces_map.get(iterativeAppID) == null){
-		        			  throw new IOException("I think something is wrong since the tasktracker never receive " +
-		        			  		"a map task with iterativeapp id " + iterativeAppID);
-		        		  } 
-		        		  
-		        		  if(first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()) == null){
-		        			  throw new IOException("I think something is wrong since the tasktracker never receive " +
-		        			  		"a map task with iterativeapp id " + iterativeAppID + " from " + taskTracker.getTrackerName());
-		        		  }
-		        		  
-		        		  target = this.first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).pollFirst();
-		        	  }else{
-		        		//the task assignment has already been processed during the map task assignment, so never use tracker_rtask_map
-		        		  target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
-		        	  }
-		        	  
-		        	  if(target == null){
-		        		  //all have been assigned, no more work, maybe it should help others to process
-		        		  LOG.info("all reduce tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
-		        		  break;
-		        	  }else{
-		    	          t = job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
-		    	  	                                    taskTrackerManager.getNumberOfUniqueHosts(), target);
-		        	  }
-		         }else if(jointype.equals("one2mul")){
-		        	 Integer target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
-		        	 
-		        	  if(target == null){
-		        		  //all have been assigned, no more work, maybe it should help others to process
-		        		  LOG.info("all reduce tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
-		        		  break;
-		        	  }else{
-		    	          t = job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
-		    	  	                                    taskTrackerManager.getNumberOfUniqueHosts(), target);
-		        	  }
-		         }else{
-	        		 //one-to-all case, assign tasks in the first iteration job, and remember this mapping
-			          
-			          //this is the first job of the series of jobs
-			          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID())){
-			        	  LOG.info(job.getJobID() + " is the first iteration job for reduce");
-			        	  newIterationJob = true;
-			          }
-			          /*
-			          //this is one of the following jobs, and prepare a assignment list for the assignment
-			          else{
-			        	  LOG.info(job.getJobID() + " is not the first iteration job for reduce");
-			        	  if(this.rtask_assign_map.get(job.getJobID()) == null){
-				        	  //prepare the map task assignment list
-				        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
-				        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_rtask_map.get(iterativeAppID).entrySet()){
-				        		  String tracker = entry.getKey();
-				        		  LinkedList<Integer> taskids = entry.getValue();
-				        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
-				        		  for(int taskid : taskids){
-				        			  copytaskids.add(taskid);
-				        		  }
-				        		  reduce_task_assign.put(tracker, copytaskids);
-				        	  }
-				        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
-			        	  }
-
-			          }
-			          */
-			          
-			          //the first iteration or following iteration
-			          //if the first iteration: assign taskid by default
-			          //else if the following iterations: assign taskid based on the first iteration assignment
-			          if(newIterationJob){
-				          t = job.obtainNewReduceTask(taskTrackerStatus, 
-				                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts());
-				          
-				          if(t != null){
-					            if(!this.tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
-					            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
-					            	this.tracker_rtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
-					            }
-					            
-					            this.tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
-					        	  LOG.info("assigning reduce task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
-				          }
-			          }else{
-			        	  Integer target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
-			        	  
-			        	  if(target == null){
-			        		  //all have been assigned, no more work, maybe it should help others to process
-			        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
-			        		  break;
-			        	  }else{
-					          t = job.obtainNewReduceTask(taskTrackerStatus, 
-						                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
-			        	  }
-			        	  
-			        	  if(t != null){
-				            	//poll, remove
-				            	this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
-				            	LOG.info("assigning reduce task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
-			        	  }
-			          }
-	        	  }
+	        	  int res = assignReduceForIterative(taskTracker, job, numTaskTrackers, taskTrackerStatus, 
+	        			  exceededMapPadding, assignedTasks);
+	        	  if(res == -1) break;
+	          }else if(job.getJobConf().isIncrementalIterative() || job.getJobConf().isIncrementalStart()){
+	        	  int res = assignReduceForIncremental(taskTracker, job, numTaskTrackers, taskTrackerStatus, 
+	        			  exceededMapPadding, assignedTasks);
+	        	  if(res == -1) break;
 	          }else{
 	        	  t = job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
                           taskTrackerManager.getNumberOfUniqueHosts());
-	          }
-	          
-	          LOG.info("try to assign new task " + t);
-	          if (t != null) {
-	            assignedTasks.add(t);
-	            break;
-	          }
-	          
-	          // Don't assign reduce tasks to the hilt!
-	          // Leave some free slots in the cluster for future task-failures,
-	          // speculative tasks etc. beyond the highest priority job
-	          if (exceededReducePadding) {
-	            break;
+	        	  
+		          if (t != null) {
+			            assignedTasks.add(t);
+			            break;
+			      }
 	          }
 	        }
 	      }
@@ -710,6 +300,958 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
 	    return assignedTasks;
 	  }
 
+	  private int assignMapForIterative(TaskTracker taskTracker, JobInProgress job,
+			  int numTaskTrackers, TaskTrackerStatus taskTrackerStatus, boolean exceededMapPadding, 
+			  List<Task> assignedTasks) throws IOException{
+		  boolean newIterationJob = false;
+		  Task t = null;
+		  
+    	  String iterativeAppID = job.getJobConf().getIterativeAlgorithmID();
+          
+    	  if(iterativeAppID.equals("none")){
+    		  throw new IOException("please specify the iteration ID!");
+    	  }
+
+    	  String jointype = job.getJobConf().get("mapred.iterative.jointype");
+    	  
+    	//prepare the iterationid map and jobtask map
+          if(!this.tracker_mtask_map.containsKey(iterativeAppID)){
+        	  //a new iterative algorithm
+        	  Map<String, LinkedList<Integer>> new_tracker_task_map = new HashMap<String, LinkedList<Integer>>();
+        	  this.tracker_mtask_map.put(iterativeAppID, new_tracker_task_map);
+        	  
+        	  Map<String, LinkedList<Integer>> new_tracker_rtask_map = new HashMap<String, LinkedList<Integer>>();
+        	  this.tracker_rtask_map.put(iterativeAppID, new_tracker_rtask_map);
+        	  
+        	  //record the first job of the series of jobs in the iterations
+        	  this.first_job_map.put(iterativeAppID, job.getJobID());
+        	  
+        	  //record the list of jobs for a iteration
+        	  HashSet<JobID> jobs = new HashSet<JobID>();
+        	  jobs.add(job.getJobID());
+        	  this.iteration_jobs_map.put(iterativeAppID, jobs);
+          }
+          
+          //this is the first job of the series of jobs
+          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) 
+        		  && job.getJobConf().isIterative()){
+        	  LOG.info(job.getJobID() + " is the first iteration job");
+        	  newIterationJob = true;
+          }
+          
+    	  
+          //this is one of the following jobs, and prepare a assignment list for the assignment
+          if(!newIterationJob){
+        	  LOG.info(job.getJobID() + " is not the first iteration job");
+        	  this.iteration_jobs_map.get(iterativeAppID).add(job.getJobID());
+        	  
+        	  if(this.mtask_assign_map.get(job.getJobID()) == null){
+	        	  //prepare the map task assignment list
+        		  LOG.info("for job " + job.getJobID() + "'s assignment:");
+	        	  Map<String, LinkedList<Integer>> map_task_assign = new HashMap<String, LinkedList<Integer>>();
+	        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_mtask_map.get(iterativeAppID).entrySet()){
+	        		  String tracker = entry.getKey();
+	        		  LinkedList<Integer> taskids = entry.getValue();
+	        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+	        		  LOG.info("assign on tracker " + tracker);
+	        		  for(int taskid : taskids){
+	        			  copytaskids.add(taskid);
+	        			  LOG.info("task id " + taskid);
+	        		  }
+	        		  map_task_assign.put(tracker, copytaskids);
+	        	  }
+	        	  this.mtask_assign_map.put(job.getJobID(), map_task_assign);
+	        	  
+	        	  //if one2one copy the map assign to reduce assign, the are with the same mapping
+	        	  if(jointype.equals("one2one")){
+		        	  //prepare the reduce task assignment list
+		        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_mtask_map.get(iterativeAppID).entrySet()){
+		        		  String tracker = entry.getKey();
+		        		  LinkedList<Integer> taskids = entry.getValue();
+		        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+		        		  for(int taskid : taskids){
+		        			  copytaskids.add(taskid);
+		        		  }
+		        		  reduce_task_assign.put(tracker, copytaskids);
+		        	  }
+		        	  this.tracker_rtask_map.put(iterativeAppID, reduce_task_assign);
+	        	  }
+	        	  
+	        	  
+	        	  //prepare the reduce task assignment list for all cases
+	        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+	        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_rtask_map.get(iterativeAppID).entrySet()){
+	        		  String tracker = entry.getKey();
+	        		  LinkedList<Integer> taskids = entry.getValue();
+	        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+	        		  for(int taskid : taskids){
+	        			  copytaskids.add(taskid);
+	        		  }
+	        		  reduce_task_assign.put(tracker, copytaskids);
+	        	  }
+	        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
+	        	  
+        	  }
+
+          }
+          
+          
+          
+          //the first iteration or following iteration
+          //if the first iteration: assign taskid by default (exception for the one2mul case, where we assign staring from 0,...,n)
+          //else if the following iterations: assign taskid based on the first iteration assignment
+          if(newIterationJob){	
+        	  
+        	  /**
+        	   * the one2mul case should be carefully taken care, we want to assgin map0,map1,map2 and reduce0 to a tracker,
+        	   * and assign map3,map4,map5 and reduce1 to another tracker
+        	   */
+        	  LOG.info("jointype is " + jointype);
+        	  
+        	  if(jointype.equals("one2mul") && !tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+        		  
+        		  //if contain the tracker, that means we have assigned tasks for this tracker
+   
+        		  int scala = job.getJobConf().getInt("mapred.iterative.data.scala", 1);
+    			  //int mapsEachTracker = job.getJobConf().getNumMapTasks() / numTaskTrackers;
+    			  int reducersEachTracker = job.getJobConf().getNumReduceTasks() / numTaskTrackers;
+    			  if(job.getJobConf().getNumReduceTasks() % numTaskTrackers != 0)
+    				  throw new IOException("job.getJobConf().getNumReduceTasks() % numTaskTrackers != 0");
+    			  
+			          if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+			        	  LinkedList<Integer> tasklist = new LinkedList<Integer>();
+			        	  this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+		          }
+			          if(!this.tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+			        	  LinkedList<Integer> tasklist = new LinkedList<Integer>();
+			        	  this.tracker_rtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+		          }
+			          
+			          //for debugging
+    			  String debugout1 = "maps: ";
+    			  String debugout2 = "reduces: ";
+    			  
+				  int reduceOffsetId = (tracker_rtask_map.get(iterativeAppID).size()-1) * reducersEachTracker; //the start reduce id
+				  
+				  for(int count = 0; count < reducersEachTracker; count++){
+					  int reducepartitionid = reduceOffsetId + count;
+					  debugout2 += reducepartitionid + " ";
+					  tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(reducepartitionid);
+					  
+					  for(int count2=0; count2<scala; count2++){
+						  int mappartitionid = reducepartitionid*scala + count2;
+						  //int mapid = job.splitTaskMap.get(mappartitionid);
+						  debugout1 += mappartitionid + " ";
+						  this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(mappartitionid);
+					  }
+				  }
+				  
+				  //print out for debug
+				  LOG.info("tracker " + taskTracker.getTrackerName() + " assigned tasks " + debugout1 + " and " + debugout2);
+        		  
+				  //make the assignment list
+        		  String tracker = taskTracker.getTrackerName();
+        		  LinkedList<Integer> mtaskids = this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName());
+        		  LinkedList<Integer> mcopytaskids = new LinkedList<Integer>();
+        		  for(int taskid : mtaskids){
+        			  mcopytaskids.add(taskid);
+        		  }
+        		  if(!mtask_assign_map.containsKey(job.getJobID())){
+	        		  Map<String, LinkedList<Integer>> map_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  this.mtask_assign_map.put(job.getJobID(), map_task_assign);
+        		  }
+        		  this.mtask_assign_map.get(job.getJobID()).put(tracker, mcopytaskids);
+        		  
+	        	  //prepare the reduce task assignment list
+        		  LinkedList<Integer> rtaskids = this.tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName());
+        		  LinkedList<Integer> rcopytaskids = new LinkedList<Integer>();
+        		  for(int taskid : rtaskids){
+        			  rcopytaskids.add(taskid);
+        		  }
+        		  if(!rtask_assign_map.containsKey(job.getJobID())){
+	        		  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
+        		  }
+	        	  this.rtask_assign_map.get(job.getJobID()).put(tracker, rcopytaskids);
+	        	  
+				  //assign a map task for this tracker
+	        	  Integer target = null;
+	        	  try{
+	        		  target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+	        	  }catch (Exception e){
+	        		  e.printStackTrace();
+	        	  }
+	        	  
+	        	  if(target == null){
+	        		  //all have been assigned, no more work, maybe it should help others to process
+	        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+	        		  return -1;
+	        	  }else{
+			          t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
+				                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
+	        	  }
+	        	  
+        	  }else{
+        		  t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
+			                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts()); 
+        	  }
+        	  
+          }else{
+        	  Integer target = null;
+        	  try{
+        		  target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+        	  }catch (Exception e){
+        		  e.printStackTrace();
+        	  }
+        	  
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+		          t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
+			                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+          }
+          
+
+          if (t != null) {
+            assignedTasks.add(t);
+            
+            //new iteration job and the first task for a tasktracker
+            //for one2mul case, we don't need to record the assignment, since we already made the assignment list beforehand
+            if(!newIterationJob || jointype.equals("one2mul")){
+            	//poll, remove
+            	this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+            	LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }else{
+            	//record the assignment list for map tasks
+	            if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+	            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
+	            	this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+	            }
+	            
+	            this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+            
+
+	            //prepare the reduce assignment, for mapping with reduce
+	            if(jointype.equals("one2one")){
+		            //prepare the reduce assignment, for mapping with reduce
+        		    if(!first_job_reduces_map.containsKey(iterativeAppID)){
+        		    	Map<String, LinkedList<Integer>> tracker_reduce_map = new HashMap<String, LinkedList<Integer>>();
+        		    	first_job_reduces_map.put(iterativeAppID, tracker_reduce_map);
+        		    }
+        		  
+        		    if(!first_job_reduces_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+        			    LinkedList<Integer> reduces = new LinkedList<Integer>();
+        			    first_job_reduces_map.get(iterativeAppID).put(taskTracker.getTrackerName(), reduces);
+        		    }
+        		   
+        		    first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+	            }
+
+	            LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }
+
+
+            // Don't assign map tasks to the hilt!
+            // Leave some free slots in the cluster for future task-failures,
+            // speculative tasks etc. beyond the highest priority job
+            if (exceededMapPadding) {
+              return 1;
+            }
+           
+            // Try all jobs again for the next Map task 
+            return -1;
+          }
+          
+          LOG.error("New Node Or Rack Local Map Task failed!");
+          
+          
+          if(newIterationJob){
+        	// Try to schedule a node-local or rack-local Map task
+	          t = job.obtainNewNonLocalMapTask(taskTrackerStatus, numTaskTrackers,
+	  	                                   taskTrackerManager.getNumberOfUniqueHosts());
+          }else{
+        	  Integer target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+        	  
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+		          t = job.obtainNewNonLocalMapTask(taskTrackerStatus, numTaskTrackers, 
+		        		  taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+          }
+
+          
+          if (t != null) {
+            assignedTasks.add(t);
+            
+            //new iteration job and the first task for a tasktracker
+            //for one2mul case, we don't need to record the assignment, since we already made the assignment list beforehand
+            if(!newIterationJob || jointype.equals("one2mul")){
+            	//poll, remove
+            	this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+            	LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }else{
+            	//record the assignment list for map tasks
+	            if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+	            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
+	            	this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+	            }
+	            
+	            this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+            
+
+	            //prepare the reduce assignment, for mapping with reduce
+	            if(jointype.equals("one2one")){
+		            //prepare the reduce assignment, for mapping with reduce
+        		    if(!first_job_reduces_map.containsKey(iterativeAppID)){
+        		    	Map<String, LinkedList<Integer>> tracker_reduce_map = new HashMap<String, LinkedList<Integer>>();
+        		    	first_job_reduces_map.put(iterativeAppID, tracker_reduce_map);
+        		    }
+        		  
+        		    if(!first_job_reduces_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+        			    LinkedList<Integer> reduces = new LinkedList<Integer>();
+        			    first_job_reduces_map.get(iterativeAppID).put(taskTracker.getTrackerName(), reduces);
+        		    }
+        		   
+        		    first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+	            }
+
+	            LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }
+
+
+            // Don't assign map tasks to the hilt!
+            // Leave some free slots in the cluster for future task-failures,
+            // speculative tasks etc. beyond the highest priority job
+            if (exceededMapPadding) {
+              return 1;
+            }
+           
+            // Try all jobs again for the next Map task 
+            return -1;
+          }
+          
+          return 0;
+	  }
+	  
+	  private int assignReduceForIterative(TaskTracker taskTracker, JobInProgress job,
+			  int numTaskTrackers, TaskTrackerStatus taskTrackerStatus, boolean exceededMapPadding, 
+			  List<Task> assignedTasks) throws IOException{
+		  boolean newIterationJob = false;
+		  Task t = null;
+		  
+    	  String iterativeAppID = job.getJobConf().getIterativeAlgorithmID();
+    	  if(iterativeAppID.equals("none")){
+    		  throw new IOException("please specify the iteration ID!");
+    	  }
+    	  
+    	  String jointype = job.getJobConf().get("mapred.iterative.jointype");
+    	  
+    	  if(jointype.equals("one2one")){
+    		  //one-to-one or one-to-mul jobs
+    		  
+	          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) 
+	        		  && job.getJobConf().isIterative()){
+	        	  LOG.info(job.getJobID() + " is the first iteration job for reduce");
+	        	  newIterationJob = true;
+	          }
+	          
+        	  Integer target = null;
+        	  if(newIterationJob){
+        		  if(first_job_reduces_map.get(iterativeAppID) == null){
+        			  throw new IOException("I think something is wrong since the tasktracker never receive " +
+        			  		"a map task with iterativeapp id " + iterativeAppID);
+        		  } 
+        		  
+        		  if(first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()) == null){
+        			  throw new IOException("I think something is wrong since the tasktracker never receive " +
+        			  		"a map task with iterativeapp id " + iterativeAppID + " from " + taskTracker.getTrackerName());
+        		  }
+        		  
+        		  LOG.info("jobtracker task buffers size " + first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).size());
+        		  target = this.first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).pollFirst();
+        	  }else{
+        		//the task assignment has already been processed during the map task assignment, so never use tracker_rtask_map
+        		  target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+        	  }
+        	  
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all reduce tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+    	          t = job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
+    	  	                                    taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+         }else if(jointype.equals("one2mul")){
+        	 Integer target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+        	 
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all reduce tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+    	          t = job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
+    	  	                                    taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+         }else{
+    		 //one-to-all case, assign tasks in the first iteration job, and remember this mapping
+	          
+	          //this is the first job of the series of jobs
+	          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID())){
+	        	  LOG.info(job.getJobID() + " is the first iteration job for reduce");
+	        	  newIterationJob = true;
+	          }
+	          /*
+	          //this is one of the following jobs, and prepare a assignment list for the assignment
+	          else{
+	        	  LOG.info(job.getJobID() + " is not the first iteration job for reduce");
+	        	  if(this.rtask_assign_map.get(job.getJobID()) == null){
+		        	  //prepare the map task assignment list
+		        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_rtask_map.get(iterativeAppID).entrySet()){
+		        		  String tracker = entry.getKey();
+		        		  LinkedList<Integer> taskids = entry.getValue();
+		        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+		        		  for(int taskid : taskids){
+		        			  copytaskids.add(taskid);
+		        		  }
+		        		  reduce_task_assign.put(tracker, copytaskids);
+		        	  }
+		        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
+	        	  }
+
+	          }
+	          */
+	          
+	          //the first iteration or following iteration
+	          //if the first iteration: assign taskid by default
+	          //else if the following iterations: assign taskid based on the first iteration assignment
+	          if(newIterationJob){
+		          t = job.obtainNewReduceTask(taskTrackerStatus, 
+		                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts());
+		          
+		          if(t != null){
+			            if(!this.tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+			            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
+			            	this.tracker_rtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+			            }
+			            
+			            this.tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+			        	  LOG.info("assigning reduce task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+		          }
+	          }else{
+	        	  Integer target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+	        	  
+	        	  if(target == null){
+	        		  //all have been assigned, no more work, maybe it should help others to process
+	        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+	        		  return -1;
+	        	  }else{
+			          t = job.obtainNewReduceTask(taskTrackerStatus, 
+				                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
+	        	  }
+	        	  
+	        	  if(t != null){
+		            	//poll, remove
+		            	this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+		            	LOG.info("assigning reduce task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+	        	  }
+	          }
+    	  }
+    	  
+    	  if(t != null){
+    		  assignedTasks.add(t);
+    		  return -1;
+    	  }
+    	  
+    	  return 0;
+	  }
+	  
+	  private int assignMapForIncremental(TaskTracker taskTracker, JobInProgress job,
+			  int numTaskTrackers, TaskTrackerStatus taskTrackerStatus, boolean exceededMapPadding, 
+			  List<Task> assignedTasks) throws IOException{
+
+		  Task t = null;
+		  
+    	  String iterativeAppID = job.getJobConf().getIterativeAlgorithmID();
+          
+    	  if(iterativeAppID.equals("none")){
+    		  throw new IOException("please specify the iteration ID!");
+    	  }
+
+    	  String jointype = job.getJobConf().get("mapred.iterative.jointype");
+    	  
+    	//prepare the iterationid map and jobtask map
+          if(!this.tracker_mtask_map.containsKey(iterativeAppID) && job.getJobConf().isIncrementalStart()){
+        	  //a new iterative algorithm
+        	  Map<String, LinkedList<Integer>> new_tracker_task_map = new HashMap<String, LinkedList<Integer>>();
+        	  this.tracker_mtask_map.put(iterativeAppID, new_tracker_task_map);
+        	  
+        	  Map<String, LinkedList<Integer>> new_tracker_rtask_map = new HashMap<String, LinkedList<Integer>>();
+        	  this.tracker_rtask_map.put(iterativeAppID, new_tracker_rtask_map);
+        	  
+        	  //record the first job of the series of jobs in the iterations
+        	  this.first_job_map.put(iterativeAppID, job.getJobID());
+        	  
+        	  //record the list of jobs for a iteration
+        	  HashSet<JobID> jobs = new HashSet<JobID>();
+        	  jobs.add(job.getJobID());
+        	  this.iteration_jobs_map.put(iterativeAppID, jobs);
+          }
+          
+          //this is the first job of the series of jobs
+          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) 
+        		  && job.getJobConf().isIterative()){
+        	  LOG.info(job.getJobID() + " is the first iteration job");
+          }
+          
+          //this is one of the following jobs, and prepare a assignment list for the assignment
+          if(job.getJobConf().isIncrementalIterative()){
+        	  LOG.info(job.getJobID() + " is not the first iteration job");
+        	  this.iteration_jobs_map.get(iterativeAppID).add(job.getJobID());
+        	  
+        	  if(this.mtask_assign_map.get(job.getJobID()) == null){
+	        	  //prepare the map task assignment list
+        		  LOG.info("for job " + job.getJobID() + "'s assignment:");
+	        	  Map<String, LinkedList<Integer>> map_task_assign = new HashMap<String, LinkedList<Integer>>();
+	        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_mtask_map.get(iterativeAppID).entrySet()){
+	        		  String tracker = entry.getKey();
+	        		  LinkedList<Integer> taskids = entry.getValue();
+	        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+	        		  LOG.info("assign on tracker " + tracker);
+	        		  for(int taskid : taskids){
+	        			  copytaskids.add(taskid);
+	        			  LOG.info("task id " + taskid);
+	        		  }
+	        		  map_task_assign.put(tracker, copytaskids);
+	        	  }
+	        	  this.mtask_assign_map.put(job.getJobID(), map_task_assign);
+	        	  
+	        	  //if one2one copy the map assign to reduce assign, the are with the same mapping
+	        	  if(jointype.equals("one2one")){
+		        	  //prepare the reduce task assignment list
+		        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_mtask_map.get(iterativeAppID).entrySet()){
+		        		  String tracker = entry.getKey();
+		        		  LinkedList<Integer> taskids = entry.getValue();
+		        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+		        		  for(int taskid : taskids){
+		        			  copytaskids.add(taskid);
+		        		  }
+		        		  reduce_task_assign.put(tracker, copytaskids);
+		        	  }
+		        	  this.tracker_rtask_map.put(iterativeAppID, reduce_task_assign);
+	        	  }
+	        	  
+	        	  
+	        	  //prepare the reduce task assignment list for all cases
+	        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+	        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_rtask_map.get(iterativeAppID).entrySet()){
+	        		  String tracker = entry.getKey();
+	        		  LinkedList<Integer> taskids = entry.getValue();
+	        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+	        		  for(int taskid : taskids){
+	        			  copytaskids.add(taskid);
+	        		  }
+	        		  reduce_task_assign.put(tracker, copytaskids);
+	        	  }
+	        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
+	        	  
+        	  }
+
+          }
+          
+          
+          
+          //the first iteration or following iteration
+          //if the first iteration: assign taskid by default (exception for the one2mul case, where we assign staring from 0,...,n)
+          //else if the following iterations: assign taskid based on the first iteration assignment
+          if(job.getJobConf().isIncrementalStart()){	
+        	  
+        	  /**
+        	   * the one2mul case should be carefully taken care, we want to assgin map0,map1,map2 and reduce0 to a tracker,
+        	   * and assign map3,map4,map5 and reduce1 to another tracker
+        	   */
+        	  LOG.info("jointype is " + jointype);
+        	  
+        	  if(jointype.equals("one2mul") && !tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+        		  
+        		  //if contain the tracker, that means we have assigned tasks for this tracker
+   
+        		  int scala = job.getJobConf().getInt("mapred.iterative.data.scala", 1);
+    			  //int mapsEachTracker = job.getJobConf().getNumMapTasks() / numTaskTrackers;
+    			  int reducersEachTracker = job.getJobConf().getNumReduceTasks() / numTaskTrackers;
+    			  if(job.getJobConf().getNumReduceTasks() % numTaskTrackers != 0)
+    				  throw new IOException("job.getJobConf().getNumReduceTasks() % numTaskTrackers != 0");
+    			  
+			          if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+			        	  LinkedList<Integer> tasklist = new LinkedList<Integer>();
+			        	  this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+		          }
+			          if(!this.tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+			        	  LinkedList<Integer> tasklist = new LinkedList<Integer>();
+			        	  this.tracker_rtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+		          }
+			          
+			          //for debugging
+    			  String debugout1 = "maps: ";
+    			  String debugout2 = "reduces: ";
+    			  
+				  int reduceOffsetId = (tracker_rtask_map.get(iterativeAppID).size()-1) * reducersEachTracker; //the start reduce id
+				  
+				  for(int count = 0; count < reducersEachTracker; count++){
+					  int reducepartitionid = reduceOffsetId + count;
+					  debugout2 += reducepartitionid + " ";
+					  tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(reducepartitionid);
+					  
+					  for(int count2=0; count2<scala; count2++){
+						  int mappartitionid = reducepartitionid*scala + count2;
+						  //int mapid = job.splitTaskMap.get(mappartitionid);
+						  debugout1 += mappartitionid + " ";
+						  this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(mappartitionid);
+					  }
+				  }
+				  
+				  //print out for debug
+				  LOG.info("tracker " + taskTracker.getTrackerName() + " assigned tasks " + debugout1 + " and " + debugout2);
+        		  
+				  //make the assignment list
+        		  String tracker = taskTracker.getTrackerName();
+        		  LinkedList<Integer> mtaskids = this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName());
+        		  LinkedList<Integer> mcopytaskids = new LinkedList<Integer>();
+        		  for(int taskid : mtaskids){
+        			  mcopytaskids.add(taskid);
+        		  }
+        		  if(!mtask_assign_map.containsKey(job.getJobID())){
+	        		  Map<String, LinkedList<Integer>> map_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  this.mtask_assign_map.put(job.getJobID(), map_task_assign);
+        		  }
+        		  this.mtask_assign_map.get(job.getJobID()).put(tracker, mcopytaskids);
+        		  
+	        	  //prepare the reduce task assignment list
+        		  LinkedList<Integer> rtaskids = this.tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName());
+        		  LinkedList<Integer> rcopytaskids = new LinkedList<Integer>();
+        		  for(int taskid : rtaskids){
+        			  rcopytaskids.add(taskid);
+        		  }
+        		  if(!rtask_assign_map.containsKey(job.getJobID())){
+	        		  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
+        		  }
+	        	  this.rtask_assign_map.get(job.getJobID()).put(tracker, rcopytaskids);
+	        	  
+				  //assign a map task for this tracker
+	        	  Integer target = null;
+	        	  try{
+	        		  target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+	        	  }catch (Exception e){
+	        		  e.printStackTrace();
+	        	  }
+	        	  
+	        	  if(target == null){
+	        		  //all have been assigned, no more work, maybe it should help others to process
+	        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+	        		  return -1;
+	        	  }else{
+			          t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
+				                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
+	        	  }
+	        	  
+        	  }else{
+        		  t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
+			                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts()); 
+        	  }
+        	  
+          }else{
+        	  Integer target = null;
+        	  try{
+        		  target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+        	  }catch (Exception e){
+        		  e.printStackTrace();
+        	  }
+        	  
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+		          t = job.obtainNewNodeOrRackLocalMapTask(taskTrackerStatus, 
+			                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+          }
+          
+
+          if (t != null) {
+            assignedTasks.add(t);
+            
+            //new iteration job and the first task for a tasktracker
+            //for one2mul case, we don't need to record the assignment, since we already made the assignment list beforehand
+            if(job.getJobConf().isIncrementalIterative() || jointype.equals("one2mul")){
+            	//poll, remove
+            	this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+            	LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }else{
+            	//record the assignment list for map tasks
+	            if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+	            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
+	            	this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+	            }
+	            
+	            this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+            
+	            //prepare the reduce assignment, for mapping with reduce
+	            if(jointype.equals("one2one")){
+		            //prepare the reduce assignment, for mapping with reduce
+        		    if(!first_job_reduces_map.containsKey(iterativeAppID)){
+        		    	Map<String, LinkedList<Integer>> tracker_reduce_map = new HashMap<String, LinkedList<Integer>>();
+        		    	first_job_reduces_map.put(iterativeAppID, tracker_reduce_map);
+        		    }
+        		  
+        		    if(!first_job_reduces_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+        			    LinkedList<Integer> reduces = new LinkedList<Integer>();
+        			    first_job_reduces_map.get(iterativeAppID).put(taskTracker.getTrackerName(), reduces);
+        		    }
+        		   
+        		    first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+        		    
+        		    LOG.info("hahahaha " + first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).size());
+	            }
+
+	            LOG.info("assigning task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }
+
+
+            // Don't assign map tasks to the hilt!
+            // Leave some free slots in the cluster for future task-failures,
+            // speculative tasks etc. beyond the highest priority job
+            if (exceededMapPadding) {
+              return 1;
+            }
+           
+            // Try all jobs again for the next Map task 
+            return -1;
+          }
+          
+          LOG.info("New Node Or Rack Local Map Task failed! or map tasks have been completed");
+          
+          
+          if(job.getJobConf().isIncrementalStart()){
+        	// Try to schedule a node-local or rack-local Map task
+	          t = job.obtainNewNonLocalMapTask(taskTrackerStatus, numTaskTrackers,
+	  	                                   taskTrackerManager.getNumberOfUniqueHosts());
+          }else{
+        	  Integer target = this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+        	  
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+		          t = job.obtainNewNonLocalMapTask(taskTrackerStatus, numTaskTrackers, 
+		        		  taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+          }
+
+          
+          if (t != null) {
+            assignedTasks.add(t);
+            
+            //new iteration job and the first task for a tasktracker
+            //for one2mul case, we don't need to record the assignment, since we already made the assignment list beforehand
+            if(job.getJobConf().isIncrementalIterative() || jointype.equals("one2mul")){
+            	//poll, remove
+            	this.mtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+            	LOG.info("assigning non local/rack task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }else{
+            	//record the assignment list for map tasks
+	            if(!this.tracker_mtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+	            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
+	            	this.tracker_mtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+	            }
+	            
+	            this.tracker_mtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+            
+	            //prepare the reduce assignment, for mapping with reduce
+	            if(jointype.equals("one2one")){
+		            //prepare the reduce assignment, for mapping with reduce
+        		    if(!first_job_reduces_map.containsKey(iterativeAppID)){
+        		    	Map<String, LinkedList<Integer>> tracker_reduce_map = new HashMap<String, LinkedList<Integer>>();
+        		    	first_job_reduces_map.put(iterativeAppID, tracker_reduce_map);
+        		    }
+        		  
+        		    if(!first_job_reduces_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+        			    LinkedList<Integer> reduces = new LinkedList<Integer>();
+        			    first_job_reduces_map.get(iterativeAppID).put(taskTracker.getTrackerName(), reduces);
+        		    }
+        		   
+        		    first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+        		    
+        		    LOG.info("hahahaha " + first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).size());
+	            }
+
+	            LOG.info("assigning non local/rack task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+            }
+
+
+            // Don't assign map tasks to the hilt!
+            // Leave some free slots in the cluster for future task-failures,
+            // speculative tasks etc. beyond the highest priority job
+            if (exceededMapPadding) {
+              return 1;
+            }
+           
+            // Try all jobs again for the next Map task 
+            return -1;
+          }
+          
+          return 0;
+	  }
+	  
+	  private int assignReduceForIncremental(TaskTracker taskTracker, JobInProgress job,
+			  int numTaskTrackers, TaskTrackerStatus taskTrackerStatus, boolean exceededMapPadding, 
+			  List<Task> assignedTasks) throws IOException{
+		  
+		  Task t = null;
+		  
+    	  String iterativeAppID = job.getJobConf().getIterativeAlgorithmID();
+    	  
+    	  if(iterativeAppID.equals("none")){
+    		  throw new IOException("please specify the iteration ID!");
+    	  }
+    	  
+    	  String jointype = job.getJobConf().get("mapred.iterative.jointype");
+    	  
+    	  if(jointype.equals("one2one")){
+    		  //one-to-one or one-to-mul jobs
+    		  
+	          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) 
+	        		  && job.getJobConf().isIncrementalStart()){
+	        	  LOG.info(job.getJobID() + " is the first iteration job for reduce");
+	          }
+	          
+        	  Integer target = null;
+        	  if(job.getJobConf().isIncrementalStart()){
+        		  
+        		  if(first_job_reduces_map.get(iterativeAppID) == null){
+        			  throw new IOException("I think something is wrong since the tasktracker never receive " +
+        			  		"a map task with iterativeapp id " + iterativeAppID);
+        		  } 
+        		  
+        		  if(first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()) == null){
+        			  throw new IOException("I think something is wrong since the tasktracker never receive " +
+        			  		"a map task with iterativeapp id " + iterativeAppID + " from " + taskTracker.getTrackerName());
+        		  }
+        		  
+        		  LOG.info("the reduce # on tracker " + taskTracker.getTrackerName() + " is " + 
+        				  first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).size());
+        		  
+        		  target = this.first_job_reduces_map.get(iterativeAppID).get(taskTracker.getTrackerName()).pollFirst();
+        	  }else{
+        		//the task assignment has already been processed during the map task assignment, so never use tracker_rtask_map
+        		  target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+        	  }
+        	  
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all reduce tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+        		  LOG.info("assigning task " + target + " on " + taskTracker.getTrackerName());
+    	          t = job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
+    	  	                                    taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+        	  
+         }else if(jointype.equals("one2mul")){
+        	 Integer target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+        	 
+        	  if(target == null){
+        		  //all have been assigned, no more work, maybe it should help others to process
+        		  LOG.info("all reduce tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+        		  return -1;
+        	  }else{
+    	          t = job.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers, 
+    	  	                                    taskTrackerManager.getNumberOfUniqueHosts(), target);
+        	  }
+         }else{
+    		 //one-to-all case, assign tasks in the first iteration job, and remember this mapping
+	          
+	          //this is the first job of the series of jobs
+	          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID())){
+	        	  LOG.info(job.getJobID() + " is the first iteration job for reduce");
+	          }
+	          /*
+	          //this is one of the following jobs, and prepare a assignment list for the assignment
+	          else{
+	        	  LOG.info(job.getJobID() + " is not the first iteration job for reduce");
+	        	  if(this.rtask_assign_map.get(job.getJobID()) == null){
+		        	  //prepare the map task assignment list
+		        	  Map<String, LinkedList<Integer>> reduce_task_assign = new HashMap<String, LinkedList<Integer>>();
+		        	  for(Map.Entry<String, LinkedList<Integer>> entry : this.tracker_rtask_map.get(iterativeAppID).entrySet()){
+		        		  String tracker = entry.getKey();
+		        		  LinkedList<Integer> taskids = entry.getValue();
+		        		  LinkedList<Integer> copytaskids = new LinkedList<Integer>();
+		        		  for(int taskid : taskids){
+		        			  copytaskids.add(taskid);
+		        		  }
+		        		  reduce_task_assign.put(tracker, copytaskids);
+		        	  }
+		        	  this.rtask_assign_map.put(job.getJobID(), reduce_task_assign);
+	        	  }
+
+	          }
+	          */
+	          
+	          //the first iteration or following iteration
+	          //if the first iteration: assign taskid by default
+	          //else if the following iterations: assign taskid based on the first iteration assignment
+	          if(job.getJobConf().isIncrementalStart()){
+		          t = job.obtainNewReduceTask(taskTrackerStatus, 
+		                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts());
+		          
+		          if(t != null){
+			            if(!this.tracker_rtask_map.get(iterativeAppID).containsKey(taskTracker.getTrackerName())){
+			            	LinkedList<Integer> tasklist = new LinkedList<Integer>();
+			            	this.tracker_rtask_map.get(iterativeAppID).put(taskTracker.getTrackerName(), tasklist);
+			            }
+			            
+			            this.tracker_rtask_map.get(iterativeAppID).get(taskTracker.getTrackerName()).add(t.getTaskID().getTaskID().getId());
+			        	  LOG.info("assigning reduce task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+		          }
+	          }else{
+	        	  Integer target = this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).peekFirst();
+	        	  
+	        	  if(target == null){
+	        		  //all have been assigned, no more work, maybe it should help others to process
+	        		  LOG.info("all map tasks on tasktracker " + taskTracker.getTrackerName() + " have been processed");
+	        		  return -1;
+	        	  }else{
+			          t = job.obtainNewReduceTask(taskTrackerStatus, 
+				                numTaskTrackers, taskTrackerManager.getNumberOfUniqueHosts(), target);
+	        	  }
+	        	  
+	        	  if(t != null){
+		            	//poll, remove
+		            	this.rtask_assign_map.get(job.getJobID()).get(taskTracker.getTrackerName()).pollFirst();
+		            	LOG.info("assigning reduce task " + t.getTaskID() + " on " + taskTracker.getTrackerName());
+	        	  }
+	          }
+    	  }
+    	  
+    	  if(t != null){
+    		  assignedTasks.add(t);
+    		  return -1;
+    	  }
+    	  
+    	  return 0;
+	  }
+	  
 	  private boolean exceededPadding(boolean isMapTask, 
 	                                  ClusterStatus clusterStatus, 
 	                                  int maxTaskTrackerSlots) { 

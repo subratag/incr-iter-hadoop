@@ -3422,8 +3422,7 @@ public class JobInProgress {
     return taskCompletionEvents.size();
   }
     
-  synchronized public TaskCompletionEvent[] getTaskCompletionEvents(
-                                                                    int fromEventId, int maxEvents) {
+  synchronized public TaskCompletionEvent[] getTaskCompletionEvents(int fromEventId, int maxEvents) {
 	  LOG.info("taskCompletionEvents size is " + taskCompletionEvents.size() + " fromeventid is " + fromEventId + " max: " + maxEvents);
     TaskCompletionEvent[] events = TaskCompletionEvent.EMPTY_ARRAY;
     if (taskCompletionEvents.size() > fromEventId) {

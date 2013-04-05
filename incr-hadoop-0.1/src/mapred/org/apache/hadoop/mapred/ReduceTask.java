@@ -1520,7 +1520,8 @@ class ReduceTask extends Task {
               !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
               new Path(getTaskID().toString()), job.getOutputKeyComparator(),
               reporter, spilledRecordsCounter, null)
-          : (job.isPreserve() || job.isIncrementalStart() || job.isIncrementalIterative()) ? reduceCopier.createKVSIterator(job, rfs, reporter)
+          : (job.isPreserve() || job.isIncrementalStart())? 
+        		  reduceCopier.createKVSIterator(job, rfs, reporter)
         		  : reduceCopier.createKVIterator(job, rfs, reporter);
 
         // free up the data structures
@@ -1575,6 +1576,17 @@ class ReduceTask extends Task {
     	
 		int iteration = 0;
 		int maxiteration = job.getMaxIterations();
+		
+		synchronized(this){
+			try {
+				LOG.info("start waiting... for iteration 1 ");
+				this.wait();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
 		try{
 	    	while(++iteration <= maxiteration){
 	    		LOG.info("start iteration " + iteration);
@@ -1610,8 +1622,7 @@ class ReduceTask extends Task {
 	                  !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
 	                  new Path(getTaskID().toString()), job.getOutputKeyComparator(),
 	                  reporter, spilledRecordsCounter, null)
-	              : (job.isPreserve() || job.isIncrementalStart() || job.isIncrementalIterative()) ? reduceCopier.createKVSIterator(job, rfs, reporter)
-	            		  : reduceCopier.createKVIterator(job, rfs, reporter);
+	              : reduceCopier.createKVSIterator(job, rfs, reporter);
 
 	            // free up the data structures
 	            mapOutputFilesOnDisk.clear();
@@ -1640,6 +1651,8 @@ class ReduceTask extends Task {
 	        	long time4 = System.currentTimeMillis();
 	        	
 	            LOG.info("job " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes copy phase " + (time2-time1) + " ms sort phase " + (time3-time2) + " ms reduce phase " + (time4-time3) + " ms");
+	            
+	            if(iteration+1 > maxiteration) break;
 	            
 				synchronized(this){
 					try {
@@ -4877,6 +4890,9 @@ class ReduceTask extends Task {
           TrippleReader<K, V, SK> reader = 
             new InMemoryTrippleReader<K, V, SK>(ramManager, mo.mapAttemptId,
                                      mo.data, 0, mo.data.length);
+          
+          LOG.info("add segment " + mo.file + "\t" + mo.mapAttemptId);
+          
           KVSSegment<K, V, SK> segment = 
             new KVSSegment<K, V, SK>(reader, true, -1);
           inMemorySegments.add(segment);
