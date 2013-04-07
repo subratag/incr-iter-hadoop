@@ -469,7 +469,6 @@ class PreserveMerger {
             long startPos = segment.getPosition();
             LOG.info("read segment " + segment);
             boolean hasNext = segment.next();
-            LOG.info("read " + key + "\t" + value);
             long endPos = segment.getPosition();
             startBytes += endPos - startPos;
             

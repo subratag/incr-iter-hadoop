@@ -3458,6 +3458,9 @@ class MapTask extends Task {
           throw (IOException)new IOException("Spill failed"
               ).initCause(sortSpillException);
         }
+        
+        //LOG.info("kvend : " + kvend + "\tkvindex: " + kvindex);
+        
         if (kvend != kvindex) {
           kvend = kvindex;
           bufend = bufmark;
@@ -3548,6 +3551,7 @@ class MapTask extends Task {
                                        InterruptedException {
       //approximate the length of the output file to be the length of the
       //buffer + header lengths for the partitions
+    	LOG.info("sort and spill");
       long size = (bufend >= bufstart
           ? bufend - bufstart
           : (bufvoid - bufend) + bufstart) +
@@ -3625,6 +3629,8 @@ class MapTask extends Task {
             spillRec.putIndex(rec, i);
 
             writer = null;
+          } catch(Exception e){
+        	  LOG.error(e);
           } finally {
             if (null != writer) writer.close();
           }
@@ -3643,6 +3649,8 @@ class MapTask extends Task {
         }
         LOG.info("Finished spill " + numSpills);
         ++numSpills;
+      } catch(Exception e){
+    	  LOG.error(e);
       } finally {
         if (out != null) out.close();
       }
