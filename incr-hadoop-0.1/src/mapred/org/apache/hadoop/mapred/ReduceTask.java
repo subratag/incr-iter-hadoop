@@ -2747,6 +2747,7 @@ class ReduceTask extends Task {
         //filter the neglective record, write the filtered records to filteredOut
 		float diff = reducer.distance(newkey, oldvalue, newvalue);
 		
+		//LOG.info("compute diff " + oldvalue + "\t" + newvalue + "\t" + diff);
 		//LOG.info("for key " + key + " source file " + largestPri + " diff between " + latestValue + " and " + value + " is " + diff);
 		
 		if(diff >= filter_threshold){
@@ -2778,7 +2779,7 @@ class ReduceTask extends Task {
       values.close();		//close the k,sk,v writer
       reducer.close();
       
-      boolean writeHDFS = true;
+      boolean writeHDFS = false;
       if(writeHDFS){
     	  FileSystem hdfs = FileSystem.get(job);
     	  this.localfs.delete(new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/.preserve-" + taskid + ".crc"));
@@ -4896,7 +4897,7 @@ class ReduceTask extends Task {
             new InMemoryTrippleReader<K, V, SK>(ramManager, mo.mapAttemptId,
                                      mo.data, 0, mo.data.length);
           
-          LOG.info("add segment " + mo.file + "\t" + mo.mapAttemptId);
+          LOG.info("add segment " + mo.file + "\t" + mo.mapAttemptId + "\t" + mo.data.length);
           
           KVSSegment<K, V, SK> segment = 
             new KVSSegment<K, V, SK>(reader, true, -1);
