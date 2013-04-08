@@ -245,12 +245,17 @@ public class genGraphReduce extends MapReduceBase implements
 					for(int j=0; j< num_link; j++){
 						int link = r.nextInt(capacity);
 						
+						/*
+						//this is for the case, no replicated link for a node, but this might result in 
+						//long running time, since we should contain the whole linklist in memory
 						int trys = 0;
 						while(links.contains(link) && trys < 10){
 							link = r.nextInt(capacity);
 							trys++;
 						}
 						if(trys == 10) continue;
+						*/
+						
 						links.add(link);
 
 						//System.out.println(weight);

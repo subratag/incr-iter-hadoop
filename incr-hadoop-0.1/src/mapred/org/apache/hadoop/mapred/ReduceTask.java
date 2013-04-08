@@ -4484,10 +4484,19 @@ class ReduceTask extends Task {
       }
       
       //start the on-disk-merge thread
-      localFSMergerThread = new LocalFSMerger((LocalFileSystem)localFileSys);
-      //start the in memory merger thread
-      inMemFSMergeThread = new InMemFSMergeThread();
+      if(conf.isPreserve() || conf.isIncrementalStart() || conf.isIncrementalIterative()){
+    	  localFSMergerThread = new LocalFSMergeKVSThread((LocalFileSystem)localFileSys);
+      }else{
+    	  localFSMergerThread = new LocalFSMergeKVThread((LocalFileSystem)localFileSys);
+      }
       localFSMergerThread.start();
+      
+      //start the in memory merger thread
+      if(conf.isPreserve() || conf.isIncrementalStart() || conf.isIncrementalIterative()){
+    	  inMemFSMergeThread = new InMemFSMergeKVSThread();
+      }else{
+    	  inMemFSMergeThread = new InMemFSMergeKVThread();
+      }
       inMemFSMergeThread.start();
       
       // start the map events thread
@@ -5400,16 +5409,16 @@ class ReduceTask extends Task {
       }
     }
     
-    
+    private abstract class LocalFSMerger extends Thread{}
     
     /** Starts merging the local copy (on disk) of the map's output so that
      * most of the reducer's input is sorted i.e overlapping shuffle
      * and merge phases.
      */
-    private class LocalFSMerger extends Thread {
+    private class LocalFSMergeKVThread extends LocalFSMerger {
       private LocalFileSystem localFileSys;
 
-      public LocalFSMerger(LocalFileSystem fs) {
+      public LocalFSMergeKVThread(LocalFileSystem fs) {
         this.localFileSys = fs;
         setName("Thread for merging on-disk files");
         setDaemon(true);
@@ -5513,9 +5522,126 @@ class ReduceTask extends Task {
       }
     }
 
-    private class InMemFSMergeThread extends Thread {
+    private class LocalFSMergeKVSThread extends LocalFSMerger {
+        private LocalFileSystem localFileSys;
+
+        public LocalFSMergeKVSThread(LocalFileSystem fs) {
+          this.localFileSys = fs;
+          setName("Thread for merging on-disk preserve files");
+          setDaemon(true);
+        }
+
+        @SuppressWarnings("unchecked")
+        public void run() {
+          try {
+            LOG.info(reduceTask.getTaskID() + " Thread started: " + getName());
+            while(!exitLocalFSMerge){
+              synchronized (mapOutputFilesOnDisk) {
+                while (!exitLocalFSMerge &&
+                    mapOutputFilesOnDisk.size() < (2 * ioSortFactor - 1)) {
+                  LOG.info(reduceTask.getTaskID() + " Thread waiting: " + getName());
+                  mapOutputFilesOnDisk.wait();
+                }
+              }
+              if(exitLocalFSMerge) {//to avoid running one extra time in the end
+                break;
+              }
+              List<Path> mapFiles = new ArrayList<Path>();
+              long approxOutputSize = 0;
+              int bytesPerSum = 
+                reduceTask.getConf().getInt("io.bytes.per.checksum", 512);
+              LOG.info(reduceTask.getTaskID() + "We have  " + 
+                  mapOutputFilesOnDisk.size() + " map outputs on disk. " +
+                  "Triggering merge of " + ioSortFactor + " files");
+              // 1. Prepare the list of files to be merged. This list is prepared
+              // using a list of map output files on disk. Currently we merge
+              // io.sort.factor files into 1.
+              synchronized (mapOutputFilesOnDisk) {
+                for (int i = 0; i < ioSortFactor; ++i) {
+                  FileStatus filestatus = mapOutputFilesOnDisk.first();
+                  mapOutputFilesOnDisk.remove(filestatus);
+                  mapFiles.add(filestatus.getPath());
+                  approxOutputSize += filestatus.getLen();
+                }
+              }
+              
+              // sanity check
+              if (mapFiles.size() == 0) {
+                  return;
+              }
+              
+              // add the checksum length
+              approxOutputSize += ChecksumFileSystem
+                                  .getChecksumLength(approxOutputSize,
+                                                     bytesPerSum);
+    
+              // 2. Start the on-disk merge process
+              Path outputPath = 
+                lDirAlloc.getLocalPathForWrite(mapFiles.get(0).toString(), 
+                                               approxOutputSize, conf)
+                .suffix(".merged");
+              IFile.TrippleWriter writer = 
+                new IFile.TrippleWriter(conf,rfs, outputPath, 
+                           conf.getMapOutputKeyClass(), 
+                           conf.getMapOutputValueClass(),
+                           conf.getStaticKeyClass(),
+                           codec, null);
+              RawKeyValueSourceIterator iter  = null;
+              final RawComparator<SK> comparator2 =
+            	        (RawComparator<SK>)WritableComparator.get(conf.getStaticKeyClass().asSubclass(WritableComparable.class));
+                
+              
+              Path tmpDir = new Path(reduceTask.getTaskID().toString());
+              try {
+                iter = PreserveMerger.merge(conf, rfs,
+                					(Class<K>)conf.getMapOutputKeyClass(),
+                					(Class<V>)conf.getMapOutputValueClass(),
+                					(Class<SK>)conf.getStaticKeyClass(),
+                                    codec, mapFiles.toArray(new Path[mapFiles.size()]), 
+                                    true, ioSortFactor, tmpDir, 
+                                    conf.getOutputKeyComparator(), 
+                                    comparator2,
+                                    reporter,
+                                    spilledRecordsCounter, null);
+                
+                PreserveMerger.writeFile(iter, writer, reporter, conf);
+                writer.close();
+              } catch (Exception e) {
+                localFileSys.delete(outputPath, true);
+                throw new IOException (StringUtils.stringifyException(e));
+              }
+              
+              synchronized (mapOutputFilesOnDisk) {
+                addToMapOutputFilesOnDisk(localFileSys.getFileStatus(outputPath));
+              }
+              
+              LOG.info(reduceTask.getTaskID() +
+                       " Finished merging " + mapFiles.size() + 
+                       " map output files on disk of total-size " + 
+                       approxOutputSize + "." + 
+                       " Local output file is " + outputPath + " of size " +
+                       localFileSys.getFileStatus(outputPath).getLen());
+              }
+          } catch (Exception e) {
+            LOG.warn(reduceTask.getTaskID()
+                     + " Merging of the local FS files threw an exception: "
+                     + StringUtils.stringifyException(e));
+            if (mergeThrowable == null) {
+              mergeThrowable = e;
+            }
+          } catch (Throwable t) {
+            String msg = getTaskID() + " : Failed to merge on the local FS" 
+                         + StringUtils.stringifyException(t);
+            reportFatalError(getTaskID(), t, msg);
+          }
+        }
+      }
+    
+    private abstract class InMemFSMergeThread extends Thread {}
+    
+    private class InMemFSMergeKVThread extends InMemFSMergeThread {
       
-      public InMemFSMergeThread() {
+      public InMemFSMergeKVThread() {
         setName("Thread for merging in memory files");
         setDaemon(true);
       }
@@ -5614,6 +5740,115 @@ class ReduceTask extends Task {
       }
     }
 
+    private class InMemFSMergeKVSThread extends InMemFSMergeThread {
+        
+        public InMemFSMergeKVSThread() {
+          setName("Thread for merging in memory preserve files");
+          setDaemon(true);
+        }
+        
+        public void run() {
+          LOG.info(reduceTask.getTaskID() + " Thread started: " + getName());
+          try {
+            boolean exit = false;
+            do {
+              exit = ramManager.waitForDataToMerge();
+              if (!exit) {
+                doInMemMerge();
+              }
+            } while (!exit);
+          } catch (Exception e) {
+            LOG.warn(reduceTask.getTaskID() +
+                     " Merge of the inmemory files threw an exception: "
+                     + StringUtils.stringifyException(e));
+            ReduceCopier.this.mergeThrowable = e;
+          } catch (Throwable t) {
+            String msg = getTaskID() + " : Failed to merge in memory" 
+                         + StringUtils.stringifyException(t);
+            reportFatalError(getTaskID(), t, msg);
+          }
+        }
+        
+        @SuppressWarnings("unchecked")
+        private void doInMemMerge() throws IOException{
+          if (mapOutputsFilesInMemory.size() == 0) {
+            return;
+          }
+          
+          //name this output file same as the name of the first file that is 
+          //there in the current list of inmem files (this is guaranteed to
+          //be absent on the disk currently. So we don't overwrite a prev. 
+          //created spill). Also we need to create the output file now since
+          //it is not guaranteed that this file will be present after merge
+          //is called (we delete empty files as soon as we see them
+          //in the merge method)
+
+          //figure out the mapId 
+          TaskID mapId = mapOutputsFilesInMemory.get(0).mapId;
+
+          List<KVSSegment<K, V, SK>> inMemorySegments = new ArrayList<KVSSegment<K,V,SK>>();
+          long mergeOutputSize = createInMemorySegments2(inMemorySegments, 0);
+          int noInMemorySegments = inMemorySegments.size();
+
+          Path outputPath =
+              mapOutputFile.getInputFileForWrite(mapId, mergeOutputSize);
+
+          IFile.TrippleWriter writer = 
+            new IFile.TrippleWriter(conf, rfs, outputPath,
+                       conf.getMapOutputKeyClass(),
+                       conf.getMapOutputValueClass(),
+                       conf.getStaticKeyClass(),
+                       codec, null);
+          
+          final RawComparator<SK> comparator2 =
+      	        (RawComparator<SK>)WritableComparator.get(conf.getStaticKeyClass().asSubclass(WritableComparable.class));
+          
+          RawKeyValueSourceIterator rIter = null;
+          try {
+            LOG.info("Initiating in-memory merge with " + noInMemorySegments + 
+                     " segments...");
+            
+            rIter = PreserveMerger.merge(conf, rfs,
+                                 (Class<K>)conf.getMapOutputKeyClass(),
+                                 (Class<V>)conf.getMapOutputValueClass(),
+                                 (Class<SK>)conf.getStaticKeyClass(),
+                                 inMemorySegments, inMemorySegments.size(),
+                                 new Path(reduceTask.getTaskID().toString()),
+                                 conf.getOutputKeyComparator(), 
+                                 comparator2,
+                                 reporter,
+                                 spilledRecordsCounter, null);
+            
+            if (combinerRunner == null) {
+              PreserveMerger.writeFile(rIter, writer, reporter, conf);
+            } else {
+            	throw new RuntimeException("Currently, we don't support combiner!");
+              //combineCollector.setWriter(writer);
+              //combinerRunner.combine(rIter, combineCollector);
+            }
+            writer.close();
+
+            LOG.info(reduceTask.getTaskID() + 
+                " Merge of the " + noInMemorySegments +
+                " preserve files in-memory complete." +
+                " Local file is " + outputPath + " of size " + 
+                localFileSys.getFileStatus(outputPath).getLen());
+          } catch (Exception e) { 
+            //make sure that we delete the ondisk file that we created 
+            //earlier when we invoked cloneFileAttributes
+            localFileSys.delete(outputPath, true);
+            throw (IOException)new IOException
+                    ("Intermediate merge failed").initCause(e);
+          }
+
+          // Note the output of the merge
+          FileStatus status = localFileSys.getFileStatus(outputPath);
+          synchronized (mapOutputFilesOnDisk) {
+            addToMapOutputFilesOnDisk(status);
+          }
+        }
+      }
+    
     private class GetMapEventsThread extends Thread {
       
       private IntWritable fromEventId = new IntWritable(0);

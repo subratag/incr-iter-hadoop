@@ -33,7 +33,7 @@ class PreserveMerger {
     new LocalDirAllocator("mapred.local.dir");
 
   public static <K extends Object, V extends Object, SK extends Object>
-  RawKeyValueIterator merge(Configuration conf, FileSystem fs,
+  RawKeyValueSourceIterator merge(Configuration conf, FileSystem fs,
                             Class<K> keyClass, Class<V> valueClass, Class<SK> skeyClass,
                             CompressionCodec codec,
                             Path[] inputs, boolean deleteInputs, 
