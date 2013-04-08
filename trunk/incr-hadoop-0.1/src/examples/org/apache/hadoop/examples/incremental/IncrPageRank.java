@@ -270,7 +270,6 @@ public class IncrPageRank {
     	itertime += (iterend - iterstart) / 1000;
     	Util.writeLog("incr.pagerank.log", "iteration computation takes " + itertime + " s");
     	
-    	iteration++;
 	    
 	    return 0;
 	}
