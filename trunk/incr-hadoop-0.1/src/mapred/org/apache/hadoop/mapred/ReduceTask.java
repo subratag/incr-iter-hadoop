@@ -2785,9 +2785,10 @@ class ReduceTask extends Task {
     	  this.localfs.delete(new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/.preserve-" + taskid + ".crc"));
     	  hdfs.copyFromLocalFile(false, preservedPath, remotePreservedPath);
     	  hdfs.copyFromLocalFile(false, newPreserveIndexPath, remotePreservedIndexPath);
-    	  hdfs.copyFromLocalFile(false, new Path(filteredfilename), 
-    			  new Path(job.get("mapred.output.dir") + "/" + getOutputName(getPartition())));
       }
+      
+	  hdfs.copyFromLocalFile(false, new Path(filteredfilename), 
+			  new Path(job.get("mapred.output.dir") + "/" + getOutputName(getPartition())));
 
       
       /*

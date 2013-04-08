@@ -378,7 +378,7 @@ class MapTask extends Task {
       }
        
       public synchronized boolean next(K key, V value)
-      throws IOException {
+    		  throws IOException {
         boolean ret = moveToNext(key, value);      
         if (ret) {
           incrCounters();
