@@ -176,13 +176,15 @@ public class genGraphReduce extends MapReduceBase implements
 				int base = subcapacity * taskid;
 				
 				//determine the most number of links one node could have
-				int avgcapacity = capacity / tasknum;
-				int mostnum;
+				int mostnum = subcapacity;
+				
+				/*
 				if(tasknum > 8){
 					mostnum = avgcapacity * 8;
 				}else{
 					mostnum = capacity;
 				}
+				*/
 				
 				for(int i=0; i<subcapacity; i++){
 					reporter.setStatus(String.valueOf(i));
@@ -244,7 +246,7 @@ public class genGraphReduce extends MapReduceBase implements
 						int link = r.nextInt(capacity);
 						
 						int trys = 0;
-						while(links.contains(link)  && trys < 10){
+						while(links.contains(link) && trys < 10){
 							link = r.nextInt(capacity);
 							trys++;
 						}
@@ -254,7 +256,6 @@ public class genGraphReduce extends MapReduceBase implements
 						//System.out.println(weight);
 						out.write(index + "\t" + String.valueOf(link) + "\n");
 						out2.write(index + "\t" + String.valueOf(link) + "\n");
-						
 					}
 					
 					out.flush();
