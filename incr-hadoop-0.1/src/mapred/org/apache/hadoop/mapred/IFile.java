@@ -2449,6 +2449,7 @@ public class IFile {
   public static class InMemoryTrippleReader<T1, T2, T3> extends TrippleReader<T1, T2, T3> {
     RamManager ramManager;
     TaskAttemptID taskAttemptId;
+    boolean dummyfile = false;
     
     public InMemoryTrippleReader(RamManager ramManager, TaskAttemptID taskAttemptId,
                           byte[] data, int start, int length)
@@ -2460,6 +2461,8 @@ public class IFile {
       buffer = data;
       bufferSize = (int)fileLength;
       dataIn.reset(buffer, start, length);
+      
+      if(length <= 3) dummyfile = true;
     }
     
     @Override
@@ -2495,6 +2498,8 @@ public class IFile {
       if (eof) {
         throw new EOFException("Completed reading " + bytesRead);
       }
+      
+      if(dummyfile) return false;
       
       // Read key and value lengths
       int oldPos = dataIn.getPosition();

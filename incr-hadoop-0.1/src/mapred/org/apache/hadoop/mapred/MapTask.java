@@ -555,7 +555,7 @@ class MapTask extends Task {
             			long starttime2 = System.currentTimeMillis();
             			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
             			long endtime2 = System.currentTimeMillis();
-            			LOG.info("map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime2-starttime2) + " ms");
+            			LOG.info("iteration " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime2-starttime2) + " ms");
         				try {
         					if(iteration >= maxiteration) break;
         					LOG.info("start waiting... ");
@@ -576,7 +576,7 @@ class MapTask extends Task {
     		runOldMapper(job, splitMetaInfo, umbilical, reporter);
     	}
     	long endtime = System.currentTimeMillis();
-    	LOG.info("job " + job.get("mapred.job.id") + " map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime-starttime) + " ms");
+    	LOG.info("job " + job.get("mapred.job.id") + " map task " + this.getTaskID().getTaskID().getId() + " take2 " + (endtime-starttime) + " ms");
     }
     done(umbilical, reporter);
   }
@@ -1245,7 +1245,9 @@ class MapTask extends Task {
 				mapper.map(deltaStatickeyObject, deltaStaticvalObject, dynamicvalObject, output, reporter);
 			}
 			
-			if(matches == 0) throw new RuntimeException("partitions do not match! no key matched!!!");
+			if(matches == 0) {
+				LOG.info("partitions might not match! no key matched!!!");
+			}
 			
 		}else if(joinType == Projector.Type.ONE2ALL){
 	

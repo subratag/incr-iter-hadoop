@@ -172,10 +172,13 @@ class ReduceTask extends Task {
 							
 							LOG.info("!!!task " + mapTaskId + " is completed! completed: " + 
 									finishedMapTasks.size() + " total: " + numMaps);
-							if(finishedMapTasks.size() >= numMaps){
-								LOG.info("have finished all!");
-								finishedMapTasks.clear();
-								reducetask.notifyAll();
+							
+							synchronized(reducetask){
+								if(finishedMapTasks.size() >= numMaps){
+									LOG.info("have finished all!");
+									finishedMapTasks.clear();
+									reducetask.notifyAll();
+								}
 							}
 						}
 						case RUNNING:
@@ -190,7 +193,7 @@ class ReduceTask extends Task {
 							}
 							
 							if(iteration > completedIterationIndex){
-								LOG.info("!!!task " + iteration + ":" + mapTaskId + " is completed! completed: " + 
+								LOG.info("!!!incremental task " + iteration + ":" + mapTaskId + " is completed! completed: " + 
 										completeIterationTasks.get(iteration).size() + " total: " + numMaps);
 								
 								if(!completeIterationTasks.get(iteration).contains(mapTaskId)){
@@ -199,9 +202,9 @@ class ReduceTask extends Task {
 								
 								synchronized(reducetask){
 									if(iteration > completedIterationIndex && completeIterationTasks.get(iteration).size() >= numMaps){
-										LOG.info("have finished all map for iteration " + iteration);
+										LOG.info("have finished all incremental map for iteration " + iteration);
 										completedIterationIndex = iteration;
-										finishedMapTasks.clear();
+										//finishedMapTasks.clear();
 										reducetask.notifyAll();
 									}
 								}
@@ -1050,22 +1053,25 @@ class ReduceTask extends Task {
 	      wrapPreserveFile = new WrapPreserveFile(job, preserveWriter, keyClass, valClass, skeyClass, outvalueClass, comparator2);
 	      
 	      currDeltaRecord = deltaReader.nextRecord();
-	      if(currDeltaRecord == null) throw new RuntimeException("no entries in delta file!!!");
-	      nextDeltaRecord = deltaReader.nextRecord();
-	      
-	      //LOG.info("delta extract: " + currDeltaRecord);
-	      //LOG.info("delta extract: " + nextDeltaRecord);
-	      
-	      int trial = 0;
-	      while(currPreserveRecord==null && wrapPreserveFile.seek(currDeltaRecord.key, trial, keyHashBuffer)){
-	    	  trial++;
-	    	  currPreserveRecord = wrapPreserveFile.getNextRecord(currDeltaRecord.key);
-	    	  LOG.info("record: " + currPreserveRecord);
+	      if(currDeltaRecord == null){
+	    	  LOG.info("no entries in delta file!!!");
+	      }else{
+		      nextDeltaRecord = deltaReader.nextRecord();
+		      
+		      //LOG.info("delta extract: " + currDeltaRecord);
+		      //LOG.info("delta extract: " + nextDeltaRecord);
+		      
+		      int trial = 0;
+		      while(currPreserveRecord==null && wrapPreserveFile.seek(currDeltaRecord.key, trial, keyHashBuffer)){
+		    	  trial++;
+		    	  currPreserveRecord = wrapPreserveFile.getNextRecord(currDeltaRecord.key);
+		    	  LOG.info("record: " + currPreserveRecord);
+		      }
+		      
+		      if(trial == 0) throw new RuntimeException("no entries in preserve file!!!");
+		      //LOG.info("initial phase:  to match " + currDeltaRecord.key + " is " + currPreserveRecord);
+		      
 	      }
-	      
-	      if(trial == 0) throw new RuntimeException("no entries in preserve file!!!");
-	      //LOG.info("initial phase:  to match " + currDeltaRecord.key + " is " + currPreserveRecord);
-	      
 	    }
 
 	    /// Iterator methods
@@ -4903,11 +4909,12 @@ class ReduceTask extends Task {
           MapOutput mo = mapOutputsFilesInMemory.remove(0);
           totalSize += mo.data.length;
           fullSize -= mo.data.length;
+          
           TrippleReader<K, V, SK> reader = 
             new InMemoryTrippleReader<K, V, SK>(ramManager, mo.mapAttemptId,
                                      mo.data, 0, mo.data.length);
           
-          LOG.info("add segment " + mo.file + "\t" + mo.mapAttemptId + "\t" + mo.data.length);
+          //LOG.info("add segment " + mo.file + "\t" + mo.mapAttemptId + "\t" + mo.data.length);
           
           KVSSegment<K, V, SK> segment = 
             new KVSSegment<K, V, SK>(reader, true, -1);
