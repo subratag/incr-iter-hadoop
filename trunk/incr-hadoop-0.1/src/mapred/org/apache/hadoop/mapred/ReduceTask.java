@@ -2877,7 +2877,7 @@ class ReduceTask extends Task {
     Path preservedPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-" + taskid);
     Path oldPreservedIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + (iteration-1) + "-" + taskid + ".index");
 	Path newPreserveIndexPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/preserve-Incr-" + iteration + "-" + taskid + ".index");
-	  
+	
 	IFile.PreserveFile<INKEY, INVALUE, SOURCEKEY, OUTVALUE> preserveFile;
 	if(hdfs.exists(remotePreservedPath)){
 		//if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
