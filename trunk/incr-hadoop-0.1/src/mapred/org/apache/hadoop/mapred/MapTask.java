@@ -1231,7 +1231,10 @@ class MapTask extends Task {
 				
 				//LOG.info("delta read: " + deltaStatickeyObject + "\t" + deltaStaticvalObject + "\t" + changeType);
 				
+				/make sure all the delta input keys have been found
 				boolean ret = false;
+				
+				/merge one-to-all case
 				while(!projectedDynamicKey.equals(dynamickeyObject)){
 					ret = dynamicReader.next(dynamickeyObject, dynamicvalObject);
 					//LOG.info("dynamic data read: " + dynamickeyObject + "\t" + dynamicvalObject);
@@ -1247,6 +1250,8 @@ class MapTask extends Task {
 				}else{
 					output.setAdd(false);
 				}
+				
+				/cache key-value pairs and call map together
 				mapper.map(deltaStatickeyObject, deltaStaticvalObject, dynamicvalObject, output, reporter);
 			}
 			
@@ -1297,6 +1302,7 @@ class MapTask extends Task {
 	hdfs = FileSystem.get(job);
 	localfs = FileSystem.getLocal(job);
 
+	/add index for static reader
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, iteration-1, reporter);					//converged result reader
 	
@@ -1359,6 +1365,7 @@ class MapTask extends Task {
 			}
 		}else if(joinType == Projector.Type.ONE2ALL){
 
+			/kmeans to heavy
 		}else if(joinType == Projector.Type.ONE2MUL){
 
 		}

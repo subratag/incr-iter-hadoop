@@ -1091,6 +1091,8 @@ class ReduceTask extends Task {
 
 	    private int ctr = 0;
 	    
+	    /new map output index it
+	    
 	    /**
 	     * zhangyf has changed the programming model of the next method. In this next() method, it might return a
 	     * negative value users set, then the user's program should take care of this negative value and skip it.
