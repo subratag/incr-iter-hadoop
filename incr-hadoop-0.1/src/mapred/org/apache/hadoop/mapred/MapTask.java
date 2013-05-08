@@ -99,28 +99,27 @@ class MapTask extends Task {
 			int iteration = 1;
 			while (!isInterrupted()/* && finishedReduceTasks.size() < getNumberOfInputs()+1*/) {
 				try {
-					LOG.info("start reduce output fetcher thread!");
-					ReduceTaskCompletionEventsUpdate updates = 
-						trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
+					synchronized(maptask){
+						LOG.info("start reduce output fetcher thread!");
+						ReduceTaskCompletionEventsUpdate updates = 
+							trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
 
-					if(updates != null){
-						//now, we only consider the one-to-one mapping
-						for(IntWritable taskidwritable : updates.getCompleteTaskIDs()){
-							int taskid = taskidwritable.get();
-							LOG.info("got reduce complete events ! " + taskid);
-							if(taskid == getTaskID().getTaskID().getId()){
-								LOG.info(taskid + ":" + getTaskID().getTaskID().getId() + " got my reduce, let's start!");
-								synchronized(maptask){
+						if(updates != null){
+							//now, we only consider the one-to-one mapping
+							for(IntWritable taskidwritable : updates.getCompleteTaskIDs()){
+								int taskid = taskidwritable.get();
+								LOG.info("got reduce complete events ! " + taskid);
+								if(taskid == getTaskID().getTaskID().getId()){
+									LOG.info(taskid + ":" + getTaskID().getTaskID().getId() + " got my reduce, let's start!");
 									maptask.notifyAll();
-									
 									iteration++;
-									maptask.reduceiteration = iteration;
+									break;
 								}
-								
-								break;
 							}
 						}
 					}
+					
+
 				}
 				catch (IOException e) {
 					e.printStackTrace();
@@ -140,7 +139,6 @@ class MapTask extends Task {
   private final static int APPROX_HEADER_LENGTH = 150;
   
   private int iteration = 0;
-  private int reduceiteration = 0;
 
   private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -551,20 +549,17 @@ class MapTask extends Task {
     		try{
     			int maxiteration = job.getMaxIterations();
     			while(true){
-        			iteration++;
-        			LOG.info("start iteration " + iteration);
-        			long starttime2 = System.currentTimeMillis();
-        			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
-        			long endtime2 = System.currentTimeMillis();
-        			LOG.info("iteration " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime2-starttime2) + " ms");
-            		
         			synchronized(this){
-            			try {
+            			iteration++;
+            			LOG.info("start iteration " + iteration);
+            			long starttime2 = System.currentTimeMillis();
+            			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
+            			long endtime2 = System.currentTimeMillis();
+            			LOG.info("iteration " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime2-starttime2) + " ms");
+        				try {
         					if(iteration >= maxiteration) break;
-        					if(reduceiteration <= iteration){
-            					LOG.info("start waiting... ");
-            					this.wait();
-        					}
+        					LOG.info("start waiting... ");
+        					this.wait();
         					LOG.info("notify signal recieved... ");
         				} catch (InterruptedException e) {
         					// TODO Auto-generated catch block
@@ -1170,6 +1165,7 @@ class MapTask extends Task {
 
 	IFile.TrippleReader<SK, SV, Text> deltaStaticReader = getDeltaStaticReader(job);		//delta update static file reader
 	RecordReader<DK, DV> dynamicReader = getDynamicReader(job, -1, reporter);					//converged result reader
+	/add index to dynamic reader
 	
     IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
     Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
@@ -1302,7 +1298,7 @@ class MapTask extends Task {
 	hdfs = FileSystem.get(job);
 	localfs = FileSystem.getLocal(job);
 
-	/add index for static reader
+	/add index for static Reader
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, iteration-1, reporter);					//converged result reader
 	
