@@ -99,27 +99,28 @@ class MapTask extends Task {
 			int iteration = 1;
 			while (!isInterrupted()/* && finishedReduceTasks.size() < getNumberOfInputs()+1*/) {
 				try {
-					synchronized(maptask){
-						LOG.info("start reduce output fetcher thread!");
-						ReduceTaskCompletionEventsUpdate updates = 
-							trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
+					LOG.info("start reduce output fetcher thread!");
+					ReduceTaskCompletionEventsUpdate updates = 
+						trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
 
-						if(updates != null){
-							//now, we only consider the one-to-one mapping
-							for(IntWritable taskidwritable : updates.getCompleteTaskIDs()){
-								int taskid = taskidwritable.get();
-								LOG.info("got reduce complete events ! " + taskid);
-								if(taskid == getTaskID().getTaskID().getId()){
-									LOG.info(taskid + ":" + getTaskID().getTaskID().getId() + " got my reduce, let's start!");
+					if(updates != null){
+						//now, we only consider the one-to-one mapping
+						for(IntWritable taskidwritable : updates.getCompleteTaskIDs()){
+							int taskid = taskidwritable.get();
+							LOG.info("got reduce complete events ! " + taskid);
+							if(taskid == getTaskID().getTaskID().getId()){
+								LOG.info(taskid + ":" + getTaskID().getTaskID().getId() + " got my reduce, let's start!");
+								synchronized(maptask){
 									maptask.notifyAll();
+									
 									iteration++;
-									break;
+									maptask.reduceiteration = iteration;
 								}
+								
+								break;
 							}
 						}
 					}
-					
-
 				}
 				catch (IOException e) {
 					e.printStackTrace();
@@ -139,6 +140,7 @@ class MapTask extends Task {
   private final static int APPROX_HEADER_LENGTH = 150;
   
   private int iteration = 0;
+  private int reduceiteration = 0;
 
   private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -549,17 +551,20 @@ class MapTask extends Task {
     		try{
     			int maxiteration = job.getMaxIterations();
     			while(true){
+        			iteration++;
+        			LOG.info("start iteration " + iteration);
+        			long starttime2 = System.currentTimeMillis();
+        			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
+        			long endtime2 = System.currentTimeMillis();
+        			LOG.info("iteration " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime2-starttime2) + " ms");
+            		
         			synchronized(this){
-            			iteration++;
-            			LOG.info("start iteration " + iteration);
-            			long starttime2 = System.currentTimeMillis();
-            			runIncrementalIterativeMapper(job, iteration, splitMetaInfo, umbilical, reporter);
-            			long endtime2 = System.currentTimeMillis();
-            			LOG.info("iteration " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes " + (endtime2-starttime2) + " ms");
-        				try {
+            			try {
         					if(iteration >= maxiteration) break;
-        					LOG.info("start waiting... ");
-        					this.wait();
+        					if(reduceiteration <= iteration){
+            					LOG.info("start waiting... ");
+            					this.wait();
+        					}
         					LOG.info("notify signal recieved... ");
         				} catch (InterruptedException e) {
         					// TODO Auto-generated catch block
