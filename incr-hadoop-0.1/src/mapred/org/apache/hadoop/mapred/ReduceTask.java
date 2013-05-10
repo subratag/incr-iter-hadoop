@@ -418,38 +418,38 @@ class ReduceTask extends Task {
 	}
   
   private class IncrementalReduceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> 
-  extends IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> {
-	public IncrementalReduceValuesIterator (RawKeyValueSourceIterator in,
-							int iteration,
-	                         RawComparator<KEY> comparator, 
-	                         Class<KEY> keyClass,
-	                         Class<VALUE> valClass,
-	                         Class<SOURCEKEY> skeyClass, 
-	                         Class<OUTVALUE> outvalueClass,
-	                         IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
-	                         VALUE negativeV,
-	                         Configuration conf, Progressable reporter)
-	throws IOException {
-		super(in, iteration, comparator, keyClass, valClass, skeyClass, outvalueClass, preserveWriter,
-				getTaskID().getTaskID().getId(), negativeV, conf, reporter);
+	  extends IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> {
+		public IncrementalReduceValuesIterator (RawKeyValueSourceIterator in,
+								int iteration,
+		                         RawComparator<KEY> comparator, 
+		                         Class<KEY> keyClass,
+		                         Class<VALUE> valClass,
+		                         Class<SOURCEKEY> skeyClass, 
+		                         Class<OUTVALUE> outvalueClass,
+		                         IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
+		                         VALUE negativeV,
+		                         Configuration conf, Progressable reporter)
+		throws IOException {
+			super(in, iteration, comparator, keyClass, valClass, skeyClass, outvalueClass, preserveWriter,
+					getTaskID().getTaskID().getId(), negativeV, conf, reporter);
+		}
+		
+		@Override
+		public VALUE next() {
+			reduceInputValueCounter.increment(1);
+			return moveToNext();
+		}
+		
+		protected VALUE moveToNext() {
+			return super.next();
+		}
+		
+		public void informReduceProgress() {
+			reducePhase.set(super.in.getProgress().get()); // update progress
+			reporter.progress();
+		}
 	}
-	
-	@Override
-	public VALUE next() {
-		reduceInputValueCounter.increment(1);
-		return moveToNext();
-	}
-	
-	protected VALUE moveToNext() {
-		return super.next();
-	}
-	
-	public void informReduceProgress() {
-		reducePhase.set(super.in.getProgress().get()); // update progress
-		reporter.progress();
-	}
-}
-  
+
   static class SourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> implements Iterator<VALUE> {
 	    protected RawKeyValueSourceIterator in; //input iterator
 	    private KEY key;               // current key
@@ -626,7 +626,8 @@ class ReduceTask extends Task {
 	  }
 	  
 	  /**
-	   * 3LineReader, a 3 bucket buffer that buffers 3 lines of the delta file
+	   * 3LineReader, a 3 bucket buffer that buffers 3 lines of the delta file, 
+	   * it handles the case that two records with consecutive '-' and new value, which needs to update it with the later one
 	   */
 	  class ThreeLineBuffer{
 			public Record lineA;
@@ -1091,7 +1092,11 @@ class ReduceTask extends Task {
 
 	    private int ctr = 0;
 	    
-	    /new map output index it
+	    /**
+	     * Shimin:read all the reduce input kvs with the same key together, and return kv one-by-one
+	     * Yanfeng: but has memory-overflow risk
+	     * Let's try it first and compare their performance, add a new class to handle this, see IncrementalBufferValuesIterator
+	     */
 	    
 	    /**
 	     * zhangyf has changed the programming model of the next method. In this next() method, it might return a
@@ -1371,6 +1376,643 @@ class ReduceTask extends Task {
 		    }
 	    }
   }
+  
+  static class IncrementalBufferValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> implements Iterator<VALUE> {
+	  
+	  class Record {
+		  KEY key;
+		  SOURCEKEY source;
+		  VALUE value;
+		  OUTVALUE outvalue;
+		  
+		  boolean isIntermediate = true;
+		  boolean hasNext = false;
+		  boolean processed = false;
+		  
+		  Record(KEY key, SOURCEKEY source, VALUE value, OUTVALUE outvalue){
+			  this.key = key;
+			  this.source = source;
+			  this.value = value;
+			  this.outvalue = outvalue;
+		  }
+		  
+		  @Override
+		  public String toString(){
+			  return key + "\t" + source + "\t" + value + "\t" + outvalue;
+		  }
+	  }
+	  
+	  class IKValues {
+		  LinkedList<VALUE> ivalues;
+		  OUTVALUE ovalue;
+		  
+		  IKValues(LinkedList<VALUE> ivalues, OUTVALUE ovalue){
+			  this.ivalues = ivalues;
+			  this.ovalue = ovalue;
+		  }
+	  }
+	  /**
+	   * 3LineReader, a 3 bucket buffer that buffers 3 lines of the delta file
+	   */
+	  class ThreeLineBuffer{
+			public Record lineA;
+			
+			public Record lineB;
+
+			public Record lineC;
+			
+			private VALUE nv;
+
+			public ThreeLineBuffer(VALUE negativeV){
+				nv = negativeV;
+			}
+			
+			public boolean isEmpty() {
+				return lineA == null && lineB == null && lineC == null;
+			}
+
+			public boolean isFull() {
+				return lineA != null && lineB != null && lineC != null;
+			}
+
+			public List<Record> getValue() {
+			
+				//LOG.info("* A:" + lineA + " negativeV " + nv);
+				//LOG.info("* B:" + lineB);
+				//LOG.info("* C:" + lineC);
+
+				List<Record> recordsList = new ArrayList<Record>();
+
+				// A && B row same return 1 tuple combining A and B
+				if (lineA.key.equals(lineB.key) && lineA.source.equals(lineB.source)) {
+
+					VALUE deltaValue = null;
+					
+					if (!lineA.value.equals(nv)) {
+						deltaValue = lineA.value;
+					} else if (!lineB.value.equals(nv)) {
+						deltaValue = lineB.value;
+					} else {
+						deltaValue = negativeV;
+					}
+					
+					Record record = new Record(lineA.key, lineA.source, deltaValue, null);
+					
+					//LOG.info("insert " + record);
+					
+					lineA = lineC;
+					lineB = null;
+					lineC = null;
+
+					recordsList.add(record);
+				}
+				// B && C row same, return 2 tuples, A and B&C
+				else if (lineB.key.equals(lineC.key) && lineB.source.equals(lineC.source)) {
+				
+					Record record1 = new Record(lineA.key, lineA.source, lineA.value, null);
+					
+					//LOG.info("insert " + record1);
+					
+					recordsList.add(record1);
+				
+					VALUE deltaValue = null;
+					
+					if (!lineB.value.equals(nv)) {
+						deltaValue = lineB.value;
+					} else if (!lineC.value.equals(nv)) {
+						deltaValue = lineC.value;
+					} else {
+						deltaValue = negativeV;
+					}
+					
+					Record record2 = new Record(lineB.key, lineB.source, deltaValue, null);
+					
+					//LOG.info("insert " + record2);
+				
+					lineA = null;
+					lineB = null;
+					lineC = null;
+						
+					recordsList.add(record2);
+				}
+				// A && B row not same, return 2 tuples A and B
+				else if (!lineA.key.equals(lineB.key) || !lineA.source.equals(lineB.source)) {
+				
+					Record record1 = new Record(lineA.key, lineA.source, lineA.value, null);
+					
+					//LOG.info("insert " + record1);
+					
+					recordsList.add(record1);
+					
+					Record record2 = new Record(lineB.key, lineB.source, lineB.value, null);
+					
+					//LOG.info("insert " + record2);
+					
+					recordsList.add(record2);
+					
+					lineA = lineC;
+					lineB = null;
+					lineC = null;
+				}
+
+				return recordsList;
+
+			}
+
+			public List<Record> getRestValue() {
+
+//				System.out.println("*1 A:" + Arrays.toString(lineA));
+//				System.out.println("*2 B:" + Arrays.toString(lineB));
+//				System.out.println("*3 C:" + Arrays.toString(lineC));
+
+				List<Record> recordsList = new ArrayList<Record>();
+
+				//only one record left in the buffer
+				if (lineA != null && lineB == null && lineC == null){
+					Record record = new Record(lineA.key, lineA.source, lineA.value, null);
+					
+					recordsList.add(record);
+				}
+				//two records left in the buffer
+				else if (lineA != null && lineB != null){
+					//the two are with the same key and source, one of them is useful
+					if (lineA.key.equals(lineB.key) && lineA.source.equals(lineB.source)){
+						VALUE deltaValue = null;
+						
+						if (!lineA.value.equals(negativeV)) {
+							deltaValue = lineA.value;
+						} else if (!lineB.value.equals(negativeV)) {
+							deltaValue = lineB.value;
+						} else {
+							deltaValue = negativeV;
+						}
+						
+						Record record = new Record(lineA.key, lineA.source, deltaValue, null);
+						
+						//lineA = lineC;
+						lineA = null;
+						lineB = null;
+						lineC = null;
+
+						recordsList.add(record);
+					}
+					//the two not same, return both
+					else {
+						Record record1 = new Record(lineA.key, lineA.source, lineA.value, null);
+						
+						recordsList.add(record1);
+						
+						Record record2 = new Record(lineB.key, lineB.source, lineB.value, null);
+						
+						recordsList.add(record2);
+					}
+				}
+				
+				lineA = null;
+				lineB = null;
+				lineC = null;
+				
+				return recordsList;
+
+			}
+	  }
+	  
+	  
+	  /**
+	   * the class for extracting the useful kv pair from the delta file
+	   * @author yzhang
+	   *
+	   */
+	  class DeltaFileReader{
+
+		  ThreeLineBuffer threeLineBuffer;
+		  RawKeyValueSourceIterator in;
+		  Deserializer<KEY> keyDeserializer;
+		  Deserializer<VALUE> valDeserializer;
+		  Deserializer<SOURCEKEY> skeyDeserializer;
+		  DataInputBuffer keyIn = new DataInputBuffer();
+		  DataInputBuffer valueIn = new DataInputBuffer();
+		  DataInputBuffer skeyIn = new DataInputBuffer();
+		  
+		  Record currRec = null;
+		  
+		  LinkedList<Record> recordQueue = new LinkedList<Record>();
+		  
+		  public DeltaFileReader(RawKeyValueSourceIterator in, JobConf job,
+				  Class<KEY> keyClass,
+                  Class<VALUE> valClass, 
+                  Class<SOURCEKEY> skeyClass,
+                  VALUE negV) throws IOException{
+			  this.in = in;
+		      SerializationFactory serializationFactory = new SerializationFactory(job);
+		      this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
+		      this.keyDeserializer.open(keyIn);
+		      this.valDeserializer = serializationFactory.getDeserializer(valClass);
+		      this.valDeserializer.open(this.valueIn);
+		      this.skeyDeserializer = serializationFactory.getDeserializer(skeyClass);
+		      this.skeyDeserializer.open(this.skeyIn);
+
+		      threeLineBuffer = new ThreeLineBuffer(negV);
+		      extractRecords();
+		  }
+		  
+		  //get the values for the same key
+		  public LinkedList<Record> getRecords() throws IOException{
+			  LinkedList<Record> values = new LinkedList<Record>();
+			  
+			  if(recordQueue.isEmpty()){
+				  //LOG.info("extract records");
+				  extractRecords();
+			  }
+			  
+			  currRec = recordQueue.poll();
+			  
+			  if(currRec == null){
+				  return null;
+			  }else{
+				  values.push(currRec);
+			  }
+			  
+			  Record nextRec = recordQueue.peek();
+			  while(nextRec != null && currRec.key.equals(nextRec.key)){
+				  values.push(recordQueue.poll());
+			  }
+			  
+			  return values;
+		  }
+		  
+		  public Record nextRecord() throws IOException{
+			  //LOG.info("queue size is " + recordQueue.size());
+			  if(recordQueue.isEmpty()){
+				  //LOG.info("extract records");
+				  extractRecords();
+			  }
+			  
+			  return recordQueue.poll();
+		  }
+		  
+		  private void extractRecords() throws IOException{
+		      while(in.next()){
+
+					if (threeLineBuffer.lineA == null) {
+						KEY key = readKey();
+				        SOURCEKEY source = readSource();
+					    VALUE value = readValue();
+					    
+					    //LOG.info("delta file read " + key + "\t" + source + "\t" + value);
+					      
+						threeLineBuffer.lineA = new Record(key, source, value, null);
+						continue;
+					}
+					
+					if (threeLineBuffer.lineB == null) {
+						KEY key = readKey();
+				        SOURCEKEY source = readSource();
+					    VALUE value = readValue();
+					      
+					    //LOG.info("delta file read " + key + "\t" + source + "\t" + value);
+					    
+						threeLineBuffer.lineB = new Record(key, source, value, null);
+
+						continue;
+					}
+					
+					KEY key = readKey();
+			        SOURCEKEY source = readSource();
+				    VALUE value = readValue();
+				    
+				    //LOG.info("delta file read " + key + "\t" + source + "\t" + value);
+				    
+					threeLineBuffer.lineC = new Record(key, source, value, null);
+		
+					List<Record> newrecordsList = threeLineBuffer.getValue();
+					
+					recordQueue.addAll(newrecordsList);
+					return;
+		      }
+		      
+		      if (!threeLineBuffer.isEmpty()) {
+					List<Record> newrecordsList = threeLineBuffer.getRestValue();
+					recordQueue.addAll(newrecordsList);
+		      }
+		  }
+		  
+		  public KEY readKey() throws IOException{
+			  KEY key = null;
+			  DataInputBuffer keyBytes = in.getKey();
+			  keyIn.reset(keyBytes.getData(), keyBytes.getPosition(), keyBytes.getLength());
+			  key = keyDeserializer.deserialize(key);
+		        
+			  return key;
+		  }
+		  
+		  public SOURCEKEY readSource() throws IOException{
+			  SOURCEKEY source = null;
+			  DataInputBuffer sourceBytes = in.getSKey();
+			  skeyIn.reset(sourceBytes.getData(), sourceBytes.getPosition(), sourceBytes.getLength());
+			  source = skeyDeserializer.deserialize(source);
+			    
+			  return source;
+		  }
+		  
+		  public VALUE readValue() throws IOException{
+			  VALUE value = null;
+			  DataInputBuffer valueBytes = in.getValue();
+			  valueIn.reset(valueBytes.getData(), valueBytes.getPosition(), valueBytes.getLength());
+			  value = valDeserializer.deserialize(value);
+		    
+			  return value;
+		  }
+	  }
+
+	  
+	  /**
+	   * the class for extracting the kv pair from the preserve file based on the given kv from delta file
+	   * @author yzhang
+	   *
+	   */
+	  class WrapPreserveFile{
+		  
+		  IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveFile;
+		  Deserializer<KEY> keyDeserializer1;
+		  Deserializer<VALUE> valDeserializer1;
+		  Deserializer<SOURCEKEY> skeyDeserializer1;
+		  Deserializer<OUTVALUE> outvalDeserializer1;
+		  DataInputBuffer keyIn1 = new DataInputBuffer();
+		  DataInputBuffer valueIn1 = new DataInputBuffer();
+		  DataInputBuffer skeyIn1 = new DataInputBuffer();
+		  DataInputBuffer outvalueIn1 = new DataInputBuffer();
+		  RawComparator<SOURCEKEY> comparator;
+		  boolean hasNext = true;
+		  boolean fileEnd = false;
+		  Record preserveRecord;
+		  int keyhash;
+		  
+		  public WrapPreserveFile(JobConf job,
+				  IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveFile,
+				  Class<KEY> keyClass,
+                  Class<VALUE> valClass, 
+                  Class<SOURCEKEY> skeyClass,
+                  Class<OUTVALUE> outvalClass,
+                  RawComparator<SOURCEKEY> com) throws IOException{
+			  this.preserveFile = preserveFile;
+			  comparator = com;
+		      SerializationFactory serializationFactory = new SerializationFactory(job);
+		      this.keyDeserializer1 = serializationFactory.getDeserializer(keyClass);
+		      this.keyDeserializer1.open(keyIn1);
+		      this.valDeserializer1 = serializationFactory.getDeserializer(valClass);
+		      this.valDeserializer1.open(valueIn1);
+		      this.skeyDeserializer1 = serializationFactory.getDeserializer(skeyClass);
+		      this.skeyDeserializer1.open(skeyIn1);
+		      this.outvalDeserializer1 = serializationFactory.getDeserializer(outvalClass);
+		      this.outvalDeserializer1.open(outvalueIn1);
+		  }
+		  
+		  public void close() throws IOException{
+			  preserveFile.close();
+		  }
+		  
+		  //return hashcode, conflict-avoidence hashcode
+		  public boolean seek(KEY k, int rehash, IntWritable hashcode) throws IOException{
+			  return preserveFile.seekKey(k, rehash, hashcode);
+		  }
+		  
+		  public Record getNextRecord(KEY k) throws IOException{
+			  KEY key1 = null;
+			  SOURCEKEY source1 = null;
+			  VALUE value1 = null;
+			  OUTVALUE outvalue1 = null;
+			  
+			  IFile.PreserveFile.TYPE returnType = preserveFile.next(keyIn1, valueIn1, skeyIn1, outvalueIn1);
+			  if(returnType == IFile.PreserveFile.TYPE.MORE){
+				  //this might be a problem for deserializing
+				  //keyDeserializer1.open(keyIn1);
+				  key1 = keyDeserializer1.deserialize(key1);
+				  //valDeserializer1.open(valueIn1);
+				  value1 = valDeserializer1.deserialize(value1);
+				  //skeyDeserializer1.open(skeyIn1);
+				  source1 = skeyDeserializer1.deserialize(source1);
+				  
+				  if(key1.equals(k)){
+					  preserveRecord = new Record(key1, source1, value1, null);
+					  //LOG.info("read preserve record: " + preserveRecord);
+					  return preserveRecord;
+				  }else{
+					  return null;
+				  }
+			  }else if(returnType == IFile.PreserveFile.TYPE.RECORDEND){
+				  //read the preserved output key value pair
+				  key1 = keyDeserializer1.deserialize(key1);
+				  outvalue1 = outvalDeserializer1.deserialize(outvalue1);
+				  
+				  if(key1.equals(k)){
+					  preserveRecord = new Record(key1, null, null, outvalue1);
+					  preserveRecord.isIntermediate = false;
+					  //LOG.info("read preserve record: " + preserveRecord);
+					  return preserveRecord;
+				  }else{
+					  return null;
+				  }
+			  }else{
+				  //read the end of the preservefile
+				  return null;
+			  }
+		  }
+		  
+		  public IKValues getIKValues(LinkedList<Record> updatedRecs) throws IOException{
+			  KEY key1 = null;
+			  SOURCEKEY source1 = null;
+			  VALUE value1 = null;
+			  OUTVALUE outvalue1 = null;
+			  KEY iK = updatedRecs.get(0).key;
+			  
+			  LinkedList<VALUE> values = new LinkedList<VALUE>();
+			  
+			  IFile.PreserveFile.TYPE returnType = preserveFile.next(keyIn1, valueIn1, skeyIn1, outvalueIn1);
+			  
+			  while(returnType == IFile.PreserveFile.TYPE.MORE){
+				  key1 = keyDeserializer1.deserialize(key1);
+				  value1 = valDeserializer1.deserialize(value1);
+				  source1 = skeyDeserializer1.deserialize(source1);
+				  
+				  if(key1.equals(iK)){
+					  if(updatedRecs.peek().source.equals(source1)){
+						  //replace with the delta value
+						  values.push(updatedRecs.poll().value);
+					  }else{
+						  values.push(value1);
+					  }
+					  
+					  returnType = preserveFile.next(keyIn1, valueIn1, skeyIn1, outvalueIn1);
+				  }else{
+					  //this is not the expected key, try next one
+					  return null;
+				  }
+			  }
+			  
+			  if(returnType == IFile.PreserveFile.TYPE.RECORDEND){
+				  //read the preserved output key value pair
+				  key1 = keyDeserializer1.deserialize(key1);
+				  outvalue1 = outvalDeserializer1.deserialize(outvalue1);
+				  
+				  if(key1.equals(iK)){
+					  return new IKValues(values, outvalue1);
+				  }else{
+					  throw new RuntimeException("read RECORDEND, " + key1 + " should be equal to " + iK);
+				  }
+			  }else{
+				  //read the end of the preservefile
+				  //but something seems wrong, after read all the iks, it should be the recordend mark
+				  throw new RuntimeException("should read RECORDEND mark!");
+			  }
+		  }
+		  
+		  public void update(int keyhash, KEY t1, VALUE t2, SOURCEKEY t3) throws IOException{
+			  preserveFile.updateShuffleKVS(keyhash, t1, t2, t3);
+		  }
+		  
+		  public void update(int keyhash, KEY t1, OUTVALUE t4) throws IOException{
+			  preserveFile.updateResKV(keyhash, t1, t4);
+		  }
+	  }
+	  
+	    private boolean more = true;
+	    protected RawKeyValueSourceIterator in;
+	    private VALUE negativeV;
+	    private DeltaFileReader deltaReader;
+	    private WrapPreserveFile wrapPreserveFile;
+		private RawComparator<SOURCEKEY> comparator2;
+		private LinkedList<Record> deltaRecs;
+		protected Progressable reporter;
+		private JobConf job;
+		private IntWritable keyHashBuffer = new IntWritable();
+		private OUTVALUE preservedOutValue = null;
+		
+		private IKValues valueBuffer;
+	    
+	    public IncrementalBufferValuesIterator (RawKeyValueSourceIterator in, 
+	    						int iteration,
+	                           RawComparator<KEY> comparator, 
+	                           Class<KEY> keyClass,
+	                           Class<VALUE> valClass, 
+	                           Class<SOURCEKEY> skeyClass, 
+	                           Class<OUTVALUE> outvalueClass,
+	                           IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
+	                           int taskid, VALUE negativeV, 
+	                           Configuration conf, 
+	                           Progressable reporter)throws IOException {
+	      this.negativeV = negativeV;
+	      this.in = in;
+	      this.reporter = reporter;
+	      job = (JobConf)conf;
+	      
+	      comparator2 = (RawComparator<SOURCEKEY>)WritableComparator.get(job.getStaticKeyClass().asSubclass(WritableComparable.class));
+                           
+	      this.deltaReader = new DeltaFileReader(in, job, keyClass, valClass, skeyClass, negativeV);
+	      wrapPreserveFile = new WrapPreserveFile(job, preserveWriter, keyClass, valClass, skeyClass, outvalueClass, comparator2);
+	      
+	      deltaRecs = deltaReader.getRecords();
+	      
+	      if(deltaRecs == null){
+	    	  LOG.info("no entries in delta file!!!");
+	      }else{
+		      /**
+		       * handle the hash conflict, if there is a hash conflict, trial will be increased by 1
+		       */
+		      int trial = 0;
+		      while(valueBuffer==null && wrapPreserveFile.seek(deltaRecs.peek().key, trial, keyHashBuffer)){
+		    	  trial++;
+		    	  //if the returned record's key is not the delta key (might be hash conflict), then try again in the while loop
+		    	  valueBuffer = wrapPreserveFile.getIKValues(deltaRecs);
+		    	  LOG.info("record: " + valueBuffer.ivalues.size());
+		      }
+		      
+		      if(trial == 0) throw new RuntimeException("no entries in preserve file!!!");
+		      //LOG.info("initial phase:  to match " + currDeltaRecord.key + " is " + currPreserveRecord);
+	      }
+	    }
+
+	    /// Iterator methods
+	    public boolean hasNext() {
+	    	return valueBuffer.ivalues.size() != 0;
+    	}
+
+	    private int ctr = 0;
+	    
+	    
+	    /**
+	     * Shimin:read all the reduce input kvs with the same key together, and return kv one-by-one
+	     * Yanfeng: but has memory-overflow risk
+	     * Let's try it first and compare their performance
+	     */
+	    
+	    /**
+	     * zhangyf has changed the programming model of the next method. In this next() method, it might return a
+	     * negative value users set, then the user's program should take care of this negative value and skip it.
+	     */
+	    public VALUE next() {
+	    	reporter.progress();
+	    	return valueBuffer.ivalues.poll();
+	    }
+
+	    public void remove() { throw new RuntimeException("not implemented"); }
+
+	    public OUTVALUE getPreservedOutValue(){
+	    	return valueBuffer.ovalue;
+	    }
+	    
+	    public void updateResKV(KEY key, OUTVALUE outvalue) throws IOException{
+	    	wrapPreserveFile.update(keyHashBuffer.get(), key, outvalue);
+	    }
+	    
+	    /** Start processing next unique key. */
+	    void nextKey() throws IOException {
+
+	    	deltaRecs = deltaReader.getRecords();
+		    if(deltaRecs == null){
+		    	more = false;
+		    	return;
+		    }
+		      
+		    int trial = 0;
+		    while(valueBuffer==null && wrapPreserveFile.seek(deltaRecs.peek().key, trial, keyHashBuffer)){
+		    	trial++;
+		    	//if the returned record's key is not the delta key (might be hash conflict), then try again in the while loop
+		    	valueBuffer = wrapPreserveFile.getIKValues(deltaRecs);
+		    }
+		      
+		    ++ctr;
+	    }
+	    
+	    /** True iff more keys remain. */
+	    boolean more() { 
+	      return more; 
+	    }
+
+	    /** The current key. */
+	    KEY getKey() { 
+	      return deltaRecs.peek().key;
+	    }
+		
+	    public void close() throws IOException{
+	    	wrapPreserveFile.close();
+	    	
+	    	//FileSystem hdfs = FileSystem.get(job);
+	    	
+	    	//the new preserved data in the incremental jobs is named 
+	    	//reducePreserve-Incr-0(the incremental start job preserve data), 
+	    	//and the following incremental iterative jobs preserve datareducePreserve-Incr-1, reducePreserve-Incr-2,...
+		    if(job.isIncrementalStart()){
+		    	//the copy doesn't work because some checksum errors, need resolve
+		    	//hdfs.copyFromLocalFile(newPreservePath, new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + taskid + "-0"));
+		    }else if(job.isIncrementalIterative()){
+		    	//hdfs.copyFromLocalFile(newPreservePath, new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + taskid + "-" + job.getIterationNum()));
+		    }
+	    }
+  	}
+  
+  
+  
   
   private class SkippingReduceValuesIterator<KEY,VALUE> 
      extends ReduceValuesIterator<KEY,VALUE> {
@@ -2906,13 +3548,23 @@ class ReduceTask extends Task {
     	  throw new IOException("should consider skipping case!!!!");
       }
       
+      /*
       IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
     		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
 		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
 		          preserveFile,
 		          reducer.removeLable(),
 		          job, reporter);
-      values.informReduceProgress();
+	  */
+      IncrementalBufferValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
+    		  new IncrementalBufferValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
+		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
+		          preserveFile,
+		          getTaskID().getTaskID().getId(),
+		          reducer.removeLable(),
+		          job, reporter);
+      reducePhase.set(rIter.getProgress().get()); // update progress
+	  reporter.progress();
       
       float filter_threshold = conf.getFilterThreshold();
       
@@ -2952,7 +3604,9 @@ class ReduceTask extends Task {
         processed++;
         
         values.nextKey();
-        values.informReduceProgress();
+        
+        reducePhase.set(rIter.getProgress().get()); // update progress
+        reporter.progress();
       }
       long time2 = System.currentTimeMillis();
       

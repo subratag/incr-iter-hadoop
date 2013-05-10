@@ -1165,7 +1165,7 @@ class MapTask extends Task {
 
 	IFile.TrippleReader<SK, SV, Text> deltaStaticReader = getDeltaStaticReader(job);		//delta update static file reader
 	RecordReader<DK, DV> dynamicReader = getDynamicReader(job, -1, reporter);					//converged result reader
-	/add index to dynamic reader
+	//add index to dynamic reader
 	
     IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
     Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
@@ -1209,56 +1209,55 @@ class MapTask extends Task {
 	Projector.Type joinType = projector.getProjectType();
 
 	try{
-		if(joinType == Projector.Type.ONE2ONE){
-			//parse old static file and converged dynamic file, and match the changed static key
-			boolean dynamicmore = dynamicReader.next(dynamickeyObject, dynamicvalObject);
-			if(!dynamicmore) throw new RuntimeException("no more data in the dynamic data file!!! " + job.getDynamicDataPath());
+		//parse old static file and converged dynamic file, and match the changed static key
+		boolean dynamicmore = dynamicReader.next(dynamickeyObject, dynamicvalObject);
+		if(!dynamicmore) throw new RuntimeException("no more data in the dynamic data file!!! " + job.getDynamicDataPath());
 
-			int matches = 0;
-			while(deltaStaticReader.next(skeybuffer, svaluebuffer, changebuffer)){
-				deltakeyDeserializer.open(skeybuffer);
-				deltavalDeserializer.open(svaluebuffer);
-				changeDeserializer.open(changebuffer);
-				deltaStatickeyObject = (SK)deltakeyDeserializer.deserialize(deltaStatickeyObject);
-				deltaStaticvalObject = (SV)deltavalDeserializer.deserialize(deltaStaticvalObject);
-				changeType = (Text)changeDeserializer.deserialize(changeType);
+		int matches = 0;
+		while(deltaStaticReader.next(skeybuffer, svaluebuffer, changebuffer)){
+			deltakeyDeserializer.open(skeybuffer);
+			deltavalDeserializer.open(svaluebuffer);
+			changeDeserializer.open(changebuffer);
+			deltaStatickeyObject = (SK)deltakeyDeserializer.deserialize(deltaStatickeyObject);
+			deltaStaticvalObject = (SV)deltavalDeserializer.deserialize(deltaStaticvalObject);
+			changeType = (Text)changeDeserializer.deserialize(changeType);
+			
+			DK projectedDynamicKey = projector.project(deltaStatickeyObject);
+			
+			//LOG.info("delta read: " + deltaStatickeyObject + "\t" + deltaStaticvalObject + "\t" + changeType);
+			
+			boolean ret = false;
+			
+			while(!projectedDynamicKey.equals(dynamickeyObject)){
+				ret = dynamicReader.next(dynamickeyObject, dynamicvalObject);
+				//LOG.info("dynamic data read: " + dynamickeyObject + "\t" + dynamicvalObject);
 				
-				DK projectedDynamicKey = projector.project(deltaStatickeyObject);
-				
-				//LOG.info("delta read: " + deltaStatickeyObject + "\t" + deltaStaticvalObject + "\t" + changeType);
-				
-				/make sure all the delta input keys have been found
-				boolean ret = false;
-				
-				/merge one-to-all case
-				while(!projectedDynamicKey.equals(dynamickeyObject)){
-					ret = dynamicReader.next(dynamickeyObject, dynamicvalObject);
-					//LOG.info("dynamic data read: " + dynamickeyObject + "\t" + dynamicvalObject);
-					
-					if(!ret) break;
-				}
-				
-				if(ret) matches++;
-				
-				output.setSourceKey(deltaStatickeyObject);
-				if(changeType.toString().equals("+")){
-					output.setAdd(true);
-				}else{
-					output.setAdd(false);
-				}
-				
-				/cache key-value pairs and call map together
-				mapper.map(deltaStatickeyObject, deltaStaticvalObject, dynamicvalObject, output, reporter);
+				if(!ret) break;
 			}
 			
-			if(matches == 0) {
-				LOG.info("partitions might not match! no key matched!!!");
+			if(ret) {
+				matches++; 
+			}else{
+				//make sure all the delta input keys have been found
+				throw new RuntimeException("no dynamic key matched for delta static key " + deltaStatickeyObject);
 			}
 			
-		}else if(joinType == Projector.Type.ONE2ALL){
-	
-		}else if(joinType == Projector.Type.ONE2MUL){
-	
+			output.setSourceKey(deltaStatickeyObject);
+			if(changeType.toString().equals("+")){
+				output.setAdd(true);
+			}else{
+				output.setAdd(false);
+			}
+			
+			/**
+			 * Shimin:cache key-value pairs and call map together
+			 * not suitable for large key-value pair
+			 */
+			mapper.map(deltaStatickeyObject, deltaStaticvalObject, dynamicvalObject, output, reporter);
+		}
+		
+		if(matches == 0) {
+			LOG.error("partitions might not match! no key matched!!!");
 		}
 
 	}finally{
@@ -1298,6 +1297,10 @@ class MapTask extends Task {
 	hdfs = FileSystem.get(job);
 	localfs = FileSystem.getLocal(job);
 
+	/**
+	 * Shimin: add index for the static reader
+	 * Yanfeng: yes, 
+	 */
 	/add index for static Reader
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, iteration-1, reporter);					//converged result reader
@@ -1361,11 +1364,31 @@ class MapTask extends Task {
 			}
 		}else if(joinType == Projector.Type.ONE2ALL){
 
-			/kmeans to heavy
+			
 		}else if(joinType == Projector.Type.ONE2MUL){
-
+			/**
+			 * Shimin:kmeans to heavy
+			 */
+			
+			//parse old static file, and match the changed static key
+			boolean more = staticReader.next(oldStatickeyObject, oldStaticvalObject);
+			if(!more) throw new RuntimeException("no more data in the static data file!!! " + job.getStaticDataPath());
+			
+			//only one dynamic key
+			dynamicReader.next(dynamickeyObject, dynamicvalObject);
+			//LOG.info("read dynamic " + dynamickeyObject + "\t" + dynamicvalObject);
+			
+			//parse all entries in the static file
+			while(more){
+				more = staticReader.next(oldStatickeyObject, oldStaticvalObject);
+				output.setSourceKey(oldStatickeyObject);
+				
+				//update the old one, update received value at the reduce side
+				output.setAdd(true);
+				
+				mapper.map(oldStatickeyObject, oldStaticvalObject, dynamicvalObject, output, reporter);
+			}
 		}
-
     }finally{
 		collector.flush();
 		collector.close();
