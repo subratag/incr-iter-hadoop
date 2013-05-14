@@ -417,38 +417,25 @@ class ReduceTask extends Task {
 		}
 	}
   
-  private class IncrementalReduceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> 
-	  extends IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> {
-		public IncrementalReduceValuesIterator (RawKeyValueSourceIterator in,
-								int iteration,
-		                         RawComparator<KEY> comparator, 
-		                         Class<KEY> keyClass,
-		                         Class<VALUE> valClass,
-		                         Class<SOURCEKEY> skeyClass, 
-		                         Class<OUTVALUE> outvalueClass,
-		                         IFile.PreserveFile<KEY, VALUE, SOURCEKEY, OUTVALUE> preserveWriter,
-		                         VALUE negativeV,
-		                         Configuration conf, Progressable reporter)
-		throws IOException {
-			super(in, iteration, comparator, keyClass, valClass, skeyClass, outvalueClass, preserveWriter,
-					getTaskID().getTaskID().getId(), negativeV, conf, reporter);
-		}
-		
-		@Override
-		public VALUE next() {
-			reduceInputValueCounter.increment(1);
-			return moveToNext();
-		}
-		
-		protected VALUE moveToNext() {
-			return super.next();
-		}
-		
-		public void informReduceProgress() {
-			reducePhase.set(super.in.getProgress().get()); // update progress
-			reporter.progress();
-		}
-	}
+  static interface IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> extends Iterator<VALUE>{
+
+	boolean hasNext();
+
+	VALUE next();
+	
+	void nextKey() throws IOException;
+
+	boolean more();
+	
+	KEY getKey();
+	
+	void close() throws IOException;
+	
+	OUTVALUE getPreservedOutValue();
+	
+	void updateResKV(KEY key, OUTVALUE outvalue) throws IOException;
+  }
+  
 
   static class SourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> implements Iterator<VALUE> {
 	    protected RawKeyValueSourceIterator in; //input iterator
@@ -600,7 +587,8 @@ class ReduceTask extends Task {
 	 * @param <VALUE>
 	 * @param <SOURCEKEY>
 	 */
-  static class IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> implements Iterator<VALUE> {
+  static class ValuesInFileIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> 
+  	implements IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> {
 	  
 	  class Record {
 		  KEY key;
@@ -1032,7 +1020,7 @@ class ReduceTask extends Task {
 		private IntWritable keyHashBuffer = new IntWritable();
 		private OUTVALUE preservedOutValue = null;
 	    
-	    public IncrementalSourceValuesIterator (RawKeyValueSourceIterator in, 
+	    public ValuesInFileIterator (RawKeyValueSourceIterator in, 
 	    						int iteration,
 	                           RawComparator<KEY> comparator, 
 	                           Class<KEY> keyClass,
@@ -1311,7 +1299,7 @@ class ReduceTask extends Task {
 	    }
 	    
 	    /** Start processing next unique key. */
-	    void nextKey() throws IOException {
+	    public void nextKey() throws IOException {
 	    	/*
 	    	if(!more){
 	    		preserveReader.setNextKey();
@@ -1350,13 +1338,13 @@ class ReduceTask extends Task {
 	    }
 	    
 	    /** True iff more keys remain. */
-	    boolean more() { 
+	    public boolean more() { 
 	      //return more; 
 	    	return currDeltaRecord != null;
 	    }
 
 	    /** The current key. */
-	    KEY getKey() { 
+	    public KEY getKey() { 
 	      return currDeltaRecord.key; 
 	    }
 		    
@@ -1377,7 +1365,8 @@ class ReduceTask extends Task {
 	    }
   }
   
-  static class IncrementalBufferValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> implements Iterator<VALUE> {
+  static class ValuesInMemIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> 
+  	implements IncrementalSourceValuesIterator<KEY,VALUE,SOURCEKEY,OUTVALUE> {
 	  
 	  class Record {
 		  KEY key;
@@ -1403,14 +1392,17 @@ class ReduceTask extends Task {
 	  }
 	  
 	  class IKValues {
+		  KEY iKey;
 		  LinkedList<VALUE> ivalues;
 		  OUTVALUE ovalue;
 		  
-		  IKValues(LinkedList<VALUE> ivalues, OUTVALUE ovalue){
+		  IKValues(KEY iKey, LinkedList<VALUE> ivalues, OUTVALUE ovalue){
+			  this.iKey = iKey;
 			  this.ivalues = ivalues;
 			  this.ovalue = ovalue;
 		  }
 	  }
+	  
 	  /**
 	   * 3LineReader, a 3 bucket buffer that buffers 3 lines of the delta file
 	   */
@@ -1826,6 +1818,8 @@ class ReduceTask extends Task {
 			  OUTVALUE outvalue1 = null;
 			  KEY iK = updatedRecs.get(0).key;
 			  
+			  LOG.info("updatedRecs size is " + updatedRecs.size() + " iK is " + iK);
+			  
 			  LinkedList<VALUE> values = new LinkedList<VALUE>();
 			  
 			  IFile.PreserveFile.TYPE returnType = preserveFile.next(keyIn1, valueIn1, skeyIn1, outvalueIn1);
@@ -1836,7 +1830,10 @@ class ReduceTask extends Task {
 				  source1 = skeyDeserializer1.deserialize(source1);
 				  
 				  if(key1.equals(iK)){
-					  if(updatedRecs.peek().source.equals(source1)){
+					  
+					  LOG.info("peek is " + updatedRecs.peek() + " source1 " + source1);
+					  
+					  if(updatedRecs.size() != 0 && updatedRecs.peek().source.equals(source1)){
 						  //replace with the delta value
 						  values.push(updatedRecs.poll().value);
 					  }else{
@@ -1856,7 +1853,7 @@ class ReduceTask extends Task {
 				  outvalue1 = outvalDeserializer1.deserialize(outvalue1);
 				  
 				  if(key1.equals(iK)){
-					  return new IKValues(values, outvalue1);
+					  return new IKValues(key1, values, outvalue1);
 				  }else{
 					  throw new RuntimeException("read RECORDEND, " + key1 + " should be equal to " + iK);
 				  }
@@ -1888,9 +1885,10 @@ class ReduceTask extends Task {
 		private IntWritable keyHashBuffer = new IntWritable();
 		private OUTVALUE preservedOutValue = null;
 		
+		private KEY iKey;
 		private IKValues valueBuffer;
 	    
-	    public IncrementalBufferValuesIterator (RawKeyValueSourceIterator in, 
+	    public ValuesInMemIterator (RawKeyValueSourceIterator in, 
 	    						int iteration,
 	                           RawComparator<KEY> comparator, 
 	                           Class<KEY> keyClass,
@@ -1966,7 +1964,7 @@ class ReduceTask extends Task {
 	    }
 	    
 	    /** Start processing next unique key. */
-	    void nextKey() throws IOException {
+	    public void nextKey() throws IOException {
 
 	    	deltaRecs = deltaReader.getRecords();
 		    if(deltaRecs == null){
@@ -1985,13 +1983,13 @@ class ReduceTask extends Task {
 	    }
 	    
 	    /** True iff more keys remain. */
-	    boolean more() { 
+	    public boolean more() { 
 	      return more; 
 	    }
 
 	    /** The current key. */
-	    KEY getKey() { 
-	      return deltaRecs.peek().key;
+	    public KEY getKey() { 
+	      return valueBuffer.iKey;
 	    }
 		
 	    public void close() throws IOException{
@@ -3371,13 +3369,16 @@ class ReduceTask extends Task {
     	  throw new IOException("should consider skipping case!!!!");
       }
       
-      IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
-    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
+      ValuesInFileIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
+    		  new ValuesInFileIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
 		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
 		          preserveFile,
+		          getTaskID().getTaskID().getId(),
 		          reducer.removeLable(),
 		          job, reporter);
-      values.informReduceProgress();
+      
+      reducePhase.set(rIter.getProgress().get()); // update progress
+	  reporter.progress();
       
       float filter_threshold = conf.getFilterThreshold();
       
@@ -3415,7 +3416,9 @@ class ReduceTask extends Task {
         }
         
         values.nextKey();
-        values.informReduceProgress();
+
+        reducePhase.set(rIter.getProgress().get()); // update progress
+  	  	reporter.progress();
       }
     	  
       //for single preserve file
@@ -3548,21 +3551,26 @@ class ReduceTask extends Task {
     	  throw new IOException("should consider skipping case!!!!");
       }
       
-      /*
-      IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
-    		  new IncrementalReduceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
-		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
-		          preserveFile,
-		          reducer.removeLable(),
-		          job, reporter);
-	  */
-      IncrementalBufferValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values = 
-    		  new IncrementalBufferValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
-		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
-		          preserveFile,
-		          getTaskID().getTaskID().getId(),
-		          reducer.removeLable(),
-		          job, reporter);
+      IncrementalSourceValuesIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE> values;
+      
+      if(job.isBufferReduceKVs()){
+          //this is the in-memory version
+          values = new ValuesInMemIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
+    		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
+    		          preserveFile,
+    		          getTaskID().getTaskID().getId(),
+    		          reducer.removeLable(),
+    		          job, reporter);
+      }else{
+          //this is the in-file version
+    	  values = new ValuesInFileIterator<INKEY,INVALUE,SOURCEKEY,OUTVALUE>(rIter, 0,
+    		          job.getOutputValueGroupingComparator(), keyClass, valueClass, skeyClass, outvalueClass,
+    		          preserveFile,
+    		          getTaskID().getTaskID().getId(),
+    		          reducer.removeLable(),
+    		          job, reporter);
+      }
+
       reducePhase.set(rIter.getProgress().get()); // update progress
 	  reporter.progress();
       

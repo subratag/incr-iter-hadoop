@@ -472,6 +472,15 @@ public class JobConf extends Configuration {
 		return getBoolean("mapred.incremental.iterative", false);
 	}
 	
+	// Yanfeng: set the reduce input kvs in incremental iterative job is buffered in memory or file
+	public void setBufferReduceKVs(boolean buffer) {
+		set("mapred.incremental.iterative.buffereRKVs", Boolean.toString(buffer));
+	}
+
+	public boolean isBufferReduceKVs() {
+		return getBoolean("mapred.incremental.iterative.buffereRKVs", false);
+	}
+	
 	// Yanfeng: set a job's iteration id (must be global unique), the jobs in a iterative algorithm share the same iteration id
 	public void setIterativeAlgorithmID(String iteration_id) {
 		set("mapred.iterative.algorithmid", iteration_id);
