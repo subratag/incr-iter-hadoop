@@ -1226,7 +1226,7 @@ class MapTask extends Task {
 			
 			//LOG.info("delta read: " + deltaStatickeyObject + "\t" + deltaStaticvalObject + "\t" + changeType);
 			
-			boolean ret = false;
+			boolean ret = true;
 			
 			while(!projectedDynamicKey.equals(dynamickeyObject)){
 				ret = dynamicReader.next(dynamickeyObject, dynamicvalObject);
@@ -1299,9 +1299,8 @@ class MapTask extends Task {
 
 	/**
 	 * Shimin: add index for the static reader
-	 * Yanfeng: yes, 
+	 * Yanfeng: yes, but later
 	 */
-	/add index for static Reader
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, iteration-1, reporter);					//converged result reader
 	
