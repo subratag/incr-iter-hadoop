@@ -1610,6 +1610,8 @@ class ReduceTask extends Task {
 		  
 		  //get the values for the same key
 		  public LinkedList<Record> getRecords() throws IOException{
+			  //LOG.info("get records: ");
+			  
 			  LinkedList<Record> values = new LinkedList<Record>();
 			  
 			  if(recordQueue.isEmpty()){
@@ -1623,11 +1625,32 @@ class ReduceTask extends Task {
 				  return null;
 			  }else{
 				  values.push(currRec);
+				  //LOG.info("push value " + currRec);
+			  }
+			  
+			  if(recordQueue.isEmpty()){
+				  //LOG.info("extract records");
+				  extractRecords();
 			  }
 			  
 			  Record nextRec = recordQueue.peek();
-			  while(nextRec != null && currRec.key.equals(nextRec.key)){
-				  values.push(recordQueue.poll());
+			  //LOG.info("currRec " + currRec + " nextRec " + nextRec);
+			  if(nextRec == null) return values;
+			  
+			  while(currRec.key.equals(nextRec.key)){
+				  nextRec = recordQueue.poll();
+				  values.push(nextRec);
+				  
+				  //LOG.info("push value " + nextRec);
+				  
+				  if(recordQueue.isEmpty()){
+					  //LOG.info("extract records");
+					  extractRecords();
+				  }
+				  
+				  nextRec = recordQueue.peek();
+				  if(nextRec == null) return values;
+				  //LOG.info("currRec " + currRec + " nextRec " + nextRec);
 			  }
 			  
 			  return values;
@@ -1818,7 +1841,7 @@ class ReduceTask extends Task {
 			  OUTVALUE outvalue1 = null;
 			  KEY iK = updatedRecs.get(0).key;
 			  
-			  LOG.info("updatedRecs size is " + updatedRecs.size() + " iK is " + iK);
+			  //LOG.info("updatedRecs size is " + updatedRecs.size() + " iK is " + iK);
 			  
 			  LinkedList<VALUE> values = new LinkedList<VALUE>();
 			  
@@ -1831,13 +1854,20 @@ class ReduceTask extends Task {
 				  
 				  if(key1.equals(iK)){
 					  
-					  LOG.info("peek is " + updatedRecs.peek() + " source1 " + source1);
+					  //LOG.info("peek is " + updatedRecs.peek() + " source1 " + source1);
 					  
 					  if(updatedRecs.size() != 0 && updatedRecs.peek().source.equals(source1)){
 						  //replace with the delta value
-						  values.push(updatedRecs.poll().value);
+						  Record updatedRec = updatedRecs.poll();
+						  values.push(updatedRec.value);
+						  
+						  //update the preserve file
+						  update(keyHashBuffer.get(), updatedRec.key, updatedRec.value, updatedRec.source);
 					  }else{
 						  values.push(value1);
+						  
+						  //update the preserve file
+						  update(keyHashBuffer.get(), key1, value1, source1);
 					  }
 					  
 					  returnType = preserveFile.next(keyIn1, valueIn1, skeyIn1, outvalueIn1);
@@ -1972,8 +2002,10 @@ class ReduceTask extends Task {
 		    	return;
 		    }
 		      
+		    valueBuffer = null;
+		    		
 		    int trial = 0;
-		    while(valueBuffer==null && wrapPreserveFile.seek(deltaRecs.peek().key, trial, keyHashBuffer)){
+		    while(valueBuffer == null && wrapPreserveFile.seek(deltaRecs.peek().key, trial, keyHashBuffer)){
 		    	trial++;
 		    	//if the returned record's key is not the delta key (might be hash conflict), then try again in the while loop
 		    	valueBuffer = wrapPreserveFile.getIKValues(deltaRecs);
@@ -3599,10 +3631,10 @@ class ReduceTask extends Task {
 		if(diff >= filter_threshold){
 			//localwriter.write(key, value);
 			filteredOut.write(newkey, newvalue);
-			//LOG.info("collect " + key + "\t" + value + " diff " + diff);
+			//LOG.info("collect " + key + "\t" + newvalue + " diff " + diff);
 			nonConvergedItems++;
 		}else{
-			//LOG.info("skip " + key + "\t" + value + " diff " + diff);
+			//LOG.info("skip " + key + "\t" + newvalue + " diff " + diff);
 		}
 		
         if(incrProcCount) {

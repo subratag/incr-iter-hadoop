@@ -150,11 +150,11 @@ public class IncrPageRank {
 	
 	private static void printUsage() {
 		System.out.println("incrpagerank <UpdateStatic> <DeltaStatic> <ConvergedValuePath> <PreservePath> <outDir> " +
-				"<partitions> <filterthreshold> <totaliter>");
+				"<partitions> <filterthreshold> <totaliter> <inmemreduce>");
 	}
 
 	public static int main(String[] args) throws Exception {
-		if (args.length < 8) {
+		if (args.length < 9) {
 			printUsage();
 			return -1;
 		}
@@ -167,6 +167,7 @@ public class IncrPageRank {
 	    int partitions = Integer.parseInt(args[5]);
 		double filterthreshold = Double.parseDouble(args[6]);
 		int totaliter = Integer.parseInt(args[7]);
+		boolean inmemreduce = Boolean.parseBoolean(args[8]);
 
 		String iteration_id = "incrpagerank" + new Date().getTime();
  
@@ -256,6 +257,7 @@ public class IncrPageRank {
 	    FileOutputFormat.setOutputPath(incriterjob, new Path(output + "/" + iteration_id + "/iter")); 	//the filtered output dynamic data
 
 	    incriterjob.setFilterThreshold((float)filterthreshold);
+	    incriterjob.setBufferReduceKVs(inmemreduce);
 
 	    incriterjob.setIterativeMapperClass(PageRankMap.class);	
 	    incriterjob.setIterativeReducerClass(PageRankReduce.class);
