@@ -226,14 +226,13 @@ public class ComPageRank {
 	}
 
 	public static int main(String[] args) throws Exception {
-		if (args.length < 3) {
+		if (args.length < 2) {
 			return -1;
 		}
 		
 		int partitions = 0;
 		int interval = 1;
 		int max_iterations = Integer.MAX_VALUE;
-		boolean bSeq = false;
 		
 		List<String> other_args = new ArrayList<String>();
 		for(int i=0; i < args.length; ++i) {
@@ -244,8 +243,6 @@ public class ComPageRank {
 		        	interval = Integer.parseInt(args[++i]);
 		          } else if ("-I".equals(args[i])) {
 		        	  max_iterations = Integer.parseInt(args[++i]);
-		          } else if ("-Seq".equals(args[i])){
-		        	  bSeq = true;
 		          } else {
 		    		  other_args.add(args[i]);
 		    	  }
