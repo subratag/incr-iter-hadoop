@@ -83,6 +83,7 @@ public class Kmeans {
 		}
 	
 	}
+	
 	public static class IntCenterKVLineRecordReader implements RecordReader<IntWritable, CenterWritable> {
 		  private final LineRecordReader lineRecordReader;
 

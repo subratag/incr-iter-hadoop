@@ -76,17 +76,27 @@ public class ExampleDriver {
       pgd.addClass("terasort", TeraSort.class, "Run the terasort");
       pgd.addClass("teravalidate", TeraValidate.class, "Checking results of terasort");
       
-      //for iterative jobs
-      pgd.addClass("disgengraph", genGraph.class, "disgen");
       pgd.addClass("preprocess", PreProcess.class, "preprocess");
-      pgd.addClass("iterpagerank", PageRank.class, "iterative pagerank");
-      pgd.addClass("iterkmeans", Kmeans.class, "iterative kmeans");
-      pgd.addClass("itermatrixvector", MatrixVector.class, "iterative matrix vector multiplication");
+      
+      //for generating graphs
+      pgd.addClass("disgengraph", genGraph.class, "disgen");
+      
+      //for native iterative computation
       pgd.addClass("naivepagerank", NaivePageRank.class, "naive pagerank");
       pgd.addClass("naivekmeans", NaiveKmeans.class, "naive kmeans");
       pgd.addClass("naivematrixvector", NaiveMatrixVectorMultiplication.class, "naive matrix vector multiplication");
+      
+      //for iterative jobs
+      pgd.addClass("iterpagerank", PageRank.class, "iterative pagerank");
+      pgd.addClass("iterkmeans", Kmeans.class, "iterative kmeans");
+      pgd.addClass("itermatrixvector", MatrixVector.class, "iterative matrix vector multiplication");
+
+      //update graph
       pgd.addClass("genprupdate", UpdatePageRankGraph.class, "generate pagerank graph update");
+      
+      //incremental processing
       pgd.addClass("incrpagerank", IncrPageRank.class, "incremental pagerank");
+      
       pgd.addClass("compagerank", ComPageRank.class, "for comparing the normal pagerank");
       pgd.addClass("compseqfile", CompSeqFile.class, "for comparing two seq files");
       pgd.addClass("test", Test.class, "test");

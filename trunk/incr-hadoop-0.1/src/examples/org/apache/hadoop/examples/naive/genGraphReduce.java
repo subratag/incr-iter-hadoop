@@ -297,7 +297,6 @@ public class genGraphReduce extends MapReduceBase implements
 					out2.flush();
 					out3.flush();
 				}
-				
 			}else if(type.equals("nmf")){
 				//int subsetnum = capacity / conf.getNumMapTasks();
 				int ntasks = conf.getNumMapTasks();
