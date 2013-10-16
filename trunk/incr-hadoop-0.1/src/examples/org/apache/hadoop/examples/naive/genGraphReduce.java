@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Random;
+import java.util.Set;
 
 import jsc.distributions.Lognormal;
 import jsc.distributions.Normal;
@@ -268,34 +269,39 @@ public class genGraphReduce extends MapReduceBase implements
 					out3.flush();
 				}
 			}else if(type.equals("km")){
-				int nummeans = 0;
-				int k = argument / Util.getTTNum(conf);
-				Random r = new Random();
-				Normal normal = new Normal(KM_NORMAL_M, KM_NORMAL_D);
+				//argument is the number of dims
+				int posible_dims = argument;
 				
+				Random r = new Random();
 				int base = subcapacity * taskid;
-				int meansbase = k * taskid;
+				
 				for(int i=0; i<subcapacity; i++){
 					int index = base + i;
-					int num_features = (int)Math.ceil(normal.random());
-					String builder = new String(); 
-					for(int j=0; j<num_features; j++){
-						int link = r.nextInt(KM_FEATURES_SCALE);
-						int weight = r.nextInt(KM_WEIGHT_SCALE);
-						builder += link + "," + weight + " ";
+					
+					//choose the number of dims of a point
+					int num_dim = r.nextInt(posible_dims) + 1;
+					Set<Integer> choosed_dims = new HashSet<Integer>(num_dim);
+					
+					String point = new String(); 
+					for(int j=0; j<num_dim; j++){
+						int dim_id = r.nextInt(posible_dims) + 1;
+						
+						while(choosed_dims.contains(dim_id)){
+							dim_id = r.nextInt(posible_dims) + 1;
+						}
+						choosed_dims.add(dim_id);
+						
+						int dim_value = r.nextInt(KM_WEIGHT_SCALE) + 1;
+						point += dim_id + "," + dim_value + " ";
 					}
 
-					out.write(index + "\t" + builder + "\n");
-					out2.write(index + "\t" + builder + "\n");
-									
-					if((nummeans < k) && (r.nextInt(100) <2)){
-						int globelindex = meansbase + nummeans;
-						out3.write((globelindex) + "\t" + builder + "\n");
-						nummeans++;
-					}
+					out.write(index + "\t" + point + "\n");
+					//out2.write(index + "\t" + point + "\n");
+					//out3.write(index + "\t" + point + "\n");	
+					
 					out.flush();
-					out2.flush();
-					out3.flush();
+					//out2.flush();
+					//out3.flush();
 				}
 			}else if(type.equals("nmf")){
 				//int subsetnum = capacity / conf.getNumMapTasks();

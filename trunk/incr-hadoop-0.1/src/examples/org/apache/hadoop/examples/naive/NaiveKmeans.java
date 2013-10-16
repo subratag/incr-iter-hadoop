@@ -5,8 +5,11 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.StringTokenizer;
@@ -20,6 +23,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
@@ -43,117 +47,58 @@ public class NaiveKmeans {
 	public static final int DIM = 40;
 	
 	/**
-	 * initialize input data maper and reducer
+	 * pick centers from initialize input data mapper and reducer
 	 */
-	public static class InitInputMapper extends MapReduceBase
-		implements Mapper<LongWritable, Text, IntWritable, Text> {
+	public static class CenterExtractMapper extends MapReduceBase
+		implements Mapper<LongWritable, Text, LongWritable, Text> {
 
+		private int interval;
+		private int count = 0;
+		private int count2 = 0;
+		
+		public void configure(JobConf job){
+			interval = job.getInt("kmeans.pick.interval", 0);
+		}
+		
 		public void map(LongWritable key, Text value,
-				OutputCollector<IntWritable, Text> output, Reporter reporter)
+				OutputCollector<LongWritable, Text> output, Reporter reporter)
 				throws IOException {
-			String line = value.toString();
-			String[] items = line.split("\t");
-			if(items.length != 4) {
-				reporter.setStatus("Doesn't work:"+line);
-				return;
+			//output a line every interval
+			if(count % interval == 0){
+				output.collect(key, value);
+				reporter.setStatus(String.valueOf(++count2));
 			}
-			int keyToEmit = items[0].hashCode();
-			int artistid = items[1].hashCode();
-			int plays = Integer.parseInt(items[3].trim());
-			Text valueToEmit = new Text(String.valueOf(artistid) + "," + plays);
-			output.collect(new IntWritable(keyToEmit), valueToEmit);
+			
+			count++;
+			
 		}
 	}
 	
-	public static class InitInputReducer extends MapReduceBase 
-		implements Reducer<IntWritable, Text, IntWritable, Text>{
-		private JobConf conf;
-		private String initCenterDir;
-		private HashMap<Integer, String> initCenters = new HashMap<Integer, String>();
-		private Random rand = new Random();
+	public static class CenterExtractReducer extends MapReduceBase 
+		implements Reducer<LongWritable, Text, NullWritable, Text>{
+		
 		private int k;
-		private int userIndex = 0;
+		private int outputclusters = 0;
+		private int count = 0;
 		
 		@Override
 		public void configure(JobConf job){
-			conf = job;
 			k = job.getInt("kmeans.cluster.k", 0);
-			initCenterDir = job.get("kmeans.init.center.dir");
 		}
 		
 		@Override
-		public void reduce(IntWritable key, Iterator<Text> values,
-				OutputCollector<IntWritable, Text> output, Reporter report) throws IOException {
-			
-			//input key: user-id
-			//input value: artist-id,plays
-			//output key: user-id
-			//output value: all artist-id,plays tuples seperated by semicolon
-			
-			TreeMap<Integer, Integer> artists = new TreeMap<Integer, Integer>();
-			while(values.hasNext()) {
-				String[] items = (((Text)values.next()).toString()).split(",");
-				int artistid = Integer.parseInt(items[0]);
-				int dim = Math.abs(artistid) % DIM;
-				int plays = Integer.parseInt(items[1]);
-				
-				if(artists.containsKey(dim)){
-					artists.put(dim, artists.get(dim) + plays);
-				}else{
-					artists.put(dim, plays);
-				}			
-			}
+		public void reduce(LongWritable key, Iterator<Text> values,
+				OutputCollector<NullWritable, Text> output, Reporter report) throws IOException {
 
-			//ensure dimension is 10
-			if(artists.size() < DIM){
-				for(int i=0; i< DIM; i++){
-					if(artists.get(i) == null){
-						artists.put(i, 0);
-					}
+			report.setStatus(String.valueOf(++count));
+			
+			if(outputclusters < k){
+				Text line = new Text();
+				while(values.hasNext()) {
+					line = values.next();
+					output.collect(NullWritable.get(), line);
+					outputclusters++;
 				}
-			}
-			
-			StringBuilder builder = new StringBuilder();
-			Iterator<Integer> it = artists.keySet().iterator();
-			while(it.hasNext()) {
-				Integer artistID = it.next();
-				int plays = artists.get(artistID);
-				builder.append(artistID);
-				builder.append(",");
-				builder.append(plays);
-				if(it.hasNext())
-					builder.append(" ");
-			}
-			
-			String toOutput = builder.toString();
-			output.collect(key, new Text(toOutput));
-			
-			//randomly collect initial centers, only one reducer collect
-			if(Util.getTaskId(conf) == 0 && (initCenters.size() < k) && (key.get() % 137 == 0)){
-				initCenters.put(userIndex, toOutput);
-				userIndex++;
-			}
-		}
-
-		@Override
-		public void close() {
-			if(Util.getTaskId(conf) != 0) return;
-			FileSystem fs;
-			try {
-				fs = FileSystem.get(conf);
-				Path initCenterPath = new Path(initCenterDir);		
-				BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fs.create(initCenterPath)));
-		
-				System.out.println(initCenters.size());
-				
-				for(int i : initCenters.keySet()){
-					bw.write(i + "\t" + initCenters.get(i) + "\n");
-				}
-				
-				bw.close();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
 		}
 	}
@@ -162,7 +107,7 @@ public class NaiveKmeans {
 	 * kmeans mapper and reducer
 	 */
 	public static class KmeansMapper extends MapReduceBase
-		implements Mapper<IntWritable, Text, IntWritable, Text> {
+		implements Mapper<Text, Text, IntWritable, Text> {
 		
 		private HashMap<Integer, TreeMap<Integer, Double>> centers = new HashMap<Integer, TreeMap<Integer, Double>>();
 		private int threshold = 0;
@@ -179,6 +124,7 @@ public class NaiveKmeans {
 		    Path initDirPath = new Path(centersDir);
 		    FileStatus[] files = fs.listStatus(initDirPath);
 		    
+		    int center_id = 0;
 		    for(FileStatus file : files){
 		    	if(!file.isDir()){
 		    		Path filePath = file.getPath();
@@ -186,30 +132,31 @@ public class NaiveKmeans {
 			    	while(br.ready()){
 			    		String line = br.readLine();
 			    		String[] item = line.split("\t");
-			    		int userid = Integer.parseInt(item[0]);
 			    		
-			    		TreeMap<Integer, Double> artists = new TreeMap<Integer, Double>();
+			    		TreeMap<Integer, Double> dimensions = new TreeMap<Integer, Double>();
 			    		
 			    		StringTokenizer st = new StringTokenizer(item[1]);
 			    		while(st.hasMoreTokens()){
-			    			String element = st.nextToken();
-			    			int index = element.indexOf(",");
+			    			String dim = st.nextToken();
+			    			int index = dim.indexOf(",");
 			    			if(index == -1){
 			    				throw new IOException("wrong init centers " + item[0] + "\t" + item[1]);
 			    			}
 			    			
-			    			int artistid = Integer.parseInt(element.substring(0, index));
-			    			double playtimes = Double.parseDouble(element.substring(index+1));
+			    			int dim_id = Integer.parseInt(dim.substring(0, index));
+			    			double dim_value = Double.parseDouble(dim.substring(index+1));
 			    			
-			    			artists.put(artistid, playtimes);
+			    			dimensions.put(dim_id, dim_value);
 			    		}
 			    		
-			    		centers.put(userid, artists);
+			    		centers.put(center_id++, dimensions);
 			    	}
 			    	br.close();
 		    	}
 		    	
 		    }
+		    
+		    System.out.println("center size: " + centers.size());
 		}
 		
 		@Override
@@ -224,77 +171,109 @@ public class NaiveKmeans {
 			}
 		}
 		
-		private double distance(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second){
-			double distance = 0;
-			for(int key : first.keySet()){
-				double score1 = first.get(key);
-				int score2 = second.get(key);
+		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second){
+			double cosine_sim = 0;
+			double norm1 = 0;
+			double norm2 = 0;
+			
+			HashSet<Integer> keys = new HashSet<Integer>();
+			keys.addAll(first.keySet());
+			keys.addAll(second.keySet());
+			
+			for(int key : keys){
+				double dim_value1;
+				int dim_value2;
 				
-				distance += (score1 - score2) * (score1 - score2);
+				if(first.containsKey(key)){
+					dim_value1 = first.get(key);
+					norm1 += dim_value1 * dim_value1;
+				}else{
+					dim_value1 = 0;
+				}
+				
+				if(second.containsKey(key)){
+					dim_value2 = second.get(key);
+					norm2 += dim_value2 * dim_value2;
+				}else{
+					dim_value2 = 0;
+				}
+				
+				cosine_sim += dim_value1 * dim_value2;
 			}
 			
-			return Math.sqrt(distance);
+			cosine_sim = cosine_sim / (Math.sqrt(norm1) * Math.sqrt(norm2));
+			
+			return cosine_sim;
 		}
 		
-		@Override
-		public void map(IntWritable key, Text value,
-				OutputCollector<IntWritable, Text> output, Reporter report)
-				throws IOException {
-			//input key: user-id
-			//input value: all artist-id,plays tuples seperated by semicolon
-			//output key: cluster id  (whose mean has the nearest measure distance)
-			//output value: user-id data
-			
-			count++;
-			report.setStatus(String.valueOf(count));
-
-			TreeMap<Integer, Integer> artists = new TreeMap<Integer, Integer>();
-			String line = value.toString();
+		private TreeMap<Integer, Integer> getDims(String line) throws IOException{
+			TreeMap<Integer, Integer> item_dims = new TreeMap<Integer, Integer>();
     		StringTokenizer st = new StringTokenizer(line);
     		while(st.hasMoreTokens()){
     			String element = st.nextToken();
     			int index = element.indexOf(",");
     			if(index == -1){
-    				throw new IOException("wrong user data " + key);
+    				throw new IOException("wrong user data " + line);
     			}
     			
-    			int artistid = Integer.parseInt(element.substring(0, index));
-    			int playtimes = Integer.parseInt(element.substring(index+1));
+    			int dim_id = Integer.parseInt(element.substring(0, index));
+    			int dim_value = Integer.parseInt(element.substring(index+1));
     			
-    			artists.put(artistid, playtimes);
+    			item_dims.put(dim_id, dim_value);
     		}
+    		
+    		return item_dims;
+		}
+		
+		@Override
+		public void map(Text key, Text value,
+				OutputCollector<IntWritable, Text> output, Reporter report)
+				throws IOException {
+			//input key: item-id
+			//input value: all dim_id,dim_value tuples seperated by semicolon
+			//output key: cluster id  (whose mean has the nearest measure distance)
+			//output value: item_id data
 			
-			double minDistance = Double.MAX_VALUE;
+			count++;
+			report.setStatus(String.valueOf(count));
+
+			//System.out.println(key + "\t" + value);
+			TreeMap<Integer, Integer> item_dims = getDims(value.toString());
+			//System.out.println(item_dims.size());
+			
+			double maxSim = -1;
 			int simcluster = -1;
 			for(Map.Entry<Integer, TreeMap<Integer, Double>> mean : centers.entrySet()){
-
 				int centerid = mean.getKey();
 				TreeMap<Integer, Double> centerdata = mean.getValue();
-				double distance = distance(centerdata, artists);
+				double similarity = similarity(centerdata, item_dims);
 
-				if(distance < minDistance) {
-					minDistance = distance;
+				if(similarity > maxSim) {
+					maxSim = similarity;
 					simcluster = centerid;
 				}
 			}
 
-			output.collect(new IntWritable(simcluster), value);
+			if(simcluster == -1){
+				System.out.println(key + "\t" + value);
+			}
 			
+			output.collect(new IntWritable(simcluster), value);
 		}
 	}
 	
 	public static class KmeansReducer extends MapReduceBase
 		implements Reducer<IntWritable, Text, IntWritable, Text> {
-
+		
 		@Override
 		public void reduce(IntWritable key, Iterator<Text> values,
 				OutputCollector<IntWritable, Text> output, Reporter report) throws IOException {
 			
 			//input key: cluster's mean  (whose mean has the nearest measure distance)
-			//input value: user-id data
+			//input value: item-id data
 
 			int num = 0;
-			TreeMap<Integer, Integer> totalartist = new TreeMap<Integer, Integer>();
+			TreeMap<Integer, Integer> center_dims = new TreeMap<Integer, Integer>();
 			while(values.hasNext()) {		
 				String line = values.next().toString();
 	    		StringTokenizer st = new StringTokenizer(line);
@@ -305,27 +284,25 @@ public class NaiveKmeans {
 	    				throw new IOException("wrong user data " + key);
 	    			}
 	    			
-	    			int artistid = Integer.parseInt(element.substring(0, index));
-	    			int playtimes = Integer.parseInt(element.substring(index+1));
+	    			int dim_id = Integer.parseInt(element.substring(0, index));
+	    			int dim_value = Integer.parseInt(element.substring(index+1));
 	    			
-	    			Integer oldv = totalartist.get(artistid);
+	    			Integer oldv = center_dims.get(dim_id);
 	    			if(oldv == null){
-	    				totalartist.put(artistid, playtimes);
+	    				center_dims.put(dim_id, dim_value);
 	    			}else{
-	    				totalartist.put(artistid, totalartist.get(artistid) + playtimes);
+	    				center_dims.put(dim_id, center_dims.get(dim_id) + dim_value);
 	    			}
 	    		}
 				num++;
 			}
 			
 			String outputstring = "";
-			TreeMap<Integer, Double> avgartist = new TreeMap<Integer, Double>();
-			for(Map.Entry<Integer, Integer> entry : totalartist.entrySet()){
-				int artist = entry.getKey();
-				int value = entry.getValue();
-				double avgscore = (double)value/num;
-				avgartist.put(artist, avgscore);
-				outputstring += artist + "," + avgscore + " ";
+			for(Map.Entry<Integer, Integer> entry : center_dims.entrySet()){
+				int dim_id = entry.getKey();
+				int dim_value = entry.getValue();
+				double avg_value = (double)dim_value/num;
+				outputstring += dim_id + "," + avg_value + " ";
 			}
 			
 			output.collect(key, new Text(outputstring));
@@ -350,8 +327,8 @@ public class NaiveKmeans {
 			int i = 0;
 			double distance = 0;
 			
-			TreeMap<Integer, Double> artists1 = new TreeMap<Integer, Double>();
-			TreeMap<Integer, Double> artists2 = new TreeMap<Integer, Double>();
+			TreeMap<Integer, Double> center_dims1 = new TreeMap<Integer, Double>();
+			TreeMap<Integer, Double> center_dims2 = new TreeMap<Integer, Double>();
 			
 			while(values.hasNext()){
 				i++;
@@ -367,10 +344,10 @@ public class NaiveKmeans {
 		    				throw new IOException("wrong user data " + key);
 		    			}
 		    			
-		    			int artistid = Integer.parseInt(element.substring(0, index));
-		    			double playtimes = Double.parseDouble(element.substring(index+1));
+		    			int dim_id = Integer.parseInt(element.substring(0, index));
+		    			double dim_value = Double.parseDouble(element.substring(index+1));
 		    			
-		    			artists1.put(artistid, playtimes);
+		    			center_dims1.put(dim_id, dim_value);
 		    		}
 				}else if(i == 2){
 		    		StringTokenizer st = new StringTokenizer(line);
@@ -381,19 +358,37 @@ public class NaiveKmeans {
 		    				throw new IOException("wrong user data " + key);
 		    			}
 		    			
-		    			int artistid = Integer.parseInt(element.substring(0, index));
-		    			double playtimes = Double.parseDouble(element.substring(index+1));
+		    			int dim_id = Integer.parseInt(element.substring(0, index));
+		    			double dim_value = Double.parseDouble(element.substring(index+1));
 		    			
-		    			artists2.put(artistid, playtimes);
+		    			center_dims2.put(dim_id, dim_value);
 		    		}
 		    		
+					HashSet<Integer> keys = new HashSet<Integer>();
+					keys.addAll(center_dims1.keySet());
+					keys.addAll(center_dims2.keySet());
 					
-					for(int art : artists1.keySet()){
-						double score1 = artists1.get(art);
-						double score2 = artists2.get(art);
+					for(int dim_id : keys){
+						double dim_value1;
+						double dim_value2;
 						
-						distance += (score1 - score2) * (score1 - score2);
+						if(center_dims1.containsKey(dim_id)){
+							dim_value1 = center_dims1.get(dim_id);
+						}else{
+							dim_value1 = 0;
+						}
+						
+						if(center_dims2.containsKey(dim_id)){
+							dim_value2 = center_dims2.get(dim_id);
+						}else{
+							dim_value2 = 0;
+						}
+						
+						distance += (dim_value1 - dim_value2) * (dim_value1 - dim_value2);
+						System.out.println("(" + dim_value1 + "-" + dim_value2 + ")^2= " + ((dim_value1 - dim_value2) * (dim_value1 - dim_value2)));
+					
 					}
+					System.out.println("total : " + distance);
 				}		
 			}
 			change += Math.sqrt(distance);
@@ -405,41 +400,98 @@ public class NaiveKmeans {
 		}
 	}
 	
+	private static void printUsage() {
+		System.out.println("naivekmeans <inStaticDir> <outDir> <k>");
+		System.out.println(	"\t-p # of parittions\n" +
+							"\t-n # of items\n" +
+							"\t-I max # of iterations");
+	}
 	
 	/**
 	 * @param args
 	 * @throws IOException 
 	 */
-	public static void main(String[] args) throws IOException {
-		if (args.length != 5) {
-		      System.err.println("Usage: kmeans <kmdata> <out dir> <k> <partitions> <maxiteration>");
-		      System.exit(2);
+	public static int main(String[] args) throws IOException {
+		if (args.length < 3) {
+			System.out.println("ERROR: Wrong Input Parameters!");
+	        printUsage();
+	        return -1;
 		}
 		
-		String input = args[0];
-		String output = args[1];
-		int k = Integer.parseInt(args[2]);
-		int partitions = Integer.parseInt(args[3]);
-		int maxiteration = Integer.parseInt(args[4]);
+		int partitions = 0;
+		int items = 0;
+		int max_iterations = Integer.MAX_VALUE;
+		
+		List<String> other_args = new ArrayList<String>();
+		for(int i=0; i < args.length; ++i) {
+		      try {
+		          if ("-p".equals(args[i])) {
+		        	partitions = Integer.parseInt(args[++i]);
+		          } else if ("-n".equals(args[i])) {
+		        	  items = Integer.parseInt(args[++i]);
+		          } else if ("-I".equals(args[i])) {
+		        	  max_iterations = Integer.parseInt(args[++i]);
+		          } else if ("-I".equals(args[i])) {
+		        	  max_iterations = Integer.parseInt(args[++i]);
+		          } else {
+		    		  other_args.add(args[i]);
+		    	  }
+		      } catch (NumberFormatException except) {
+		        System.out.println("ERROR: Integer expected instead of " + args[i]);
+		        printUsage();
+		        return -1;
+		      } catch (ArrayIndexOutOfBoundsException except) {
+		        System.out.println("ERROR: Required parameter missing from " +
+		                           args[i-1]);
+		        printUsage();
+		        return -1;
+		      }
+		}
+		
+	    if (other_args.size() < 3) {
+		      System.out.println("ERROR: Wrong number of parameters: " +
+		                         other_args.size() + ".");
+		      printUsage(); 
+		      return -1;
+		}
+	    
+	    String input = other_args.get(0);
+	    String output = other_args.get(1);
+	    int k = Integer.parseInt(other_args.get(2));
+	    
+	    if(k > items){
+		      System.out.println("ERROR: number of clusters should be smaller than the number of items!");
+		      return -1;
+	    }
 		
 		long initstart = System.currentTimeMillis();
 
 		/**
-		 * job to init the input data
+		 * job to extract the centers from the input data
 		 */
 		JobConf conf = new JobConf(NaiveKmeans.class);
-		conf.setJobName("Kmeans-Init");
-		conf.setOutputKeyClass(IntWritable.class);
-		conf.setOutputValueClass(Text.class);
-		conf.setMapperClass(InitInputMapper.class);
-		conf.setReducerClass(InitInputReducer.class);
+		conf.setJobName("Kmeans-ExtractCenters");
+		conf.setMapperClass(CenterExtractMapper.class);
+		conf.setReducerClass(CenterExtractReducer.class);
 		conf.setInputFormat(TextInputFormat.class);
-		conf.setOutputFormat(SequenceFileOutputFormat.class);
+		conf.setOutputFormat(TextOutputFormat.class);
+		conf.setMapOutputKeyClass(LongWritable.class);
+		conf.setOutputKeyClass(NullWritable.class);
 		FileInputFormat.setInputPaths(conf, new Path(input));
-		FileOutputFormat.setOutputPath(conf, new Path(output + "/initdata"));
-		conf.setInt("kmeans.cluster.k", k);
-		conf.set("kmeans.init.center.dir", output + "/iteration-0");
+		FileOutputFormat.setOutputPath(conf, new Path(output + "/iteration-0"));
+		
+		if(partitions == 0){
+			partitions = Util.getTTNum(conf);
+		}
 		conf.setNumReduceTasks(partitions);
+		if(items == 0){
+			items = k;
+		}
+		
+		conf.setInt("kmeans.cluster.k", k);
+		conf.setInt("kmeans.pick.interval", (int)Math.floor(items/k));
+		System.out.println(Math.floor(items/k));
+		
 		JobClient.runJob(conf);
 		
 		long initend = System.currentTimeMillis();
@@ -454,7 +506,7 @@ public class NaiveKmeans {
 			/****************** Main Job ********************************/
 			long iterstart = System.currentTimeMillis();;
 			conf = new JobConf(NaiveKmeans.class);
-			conf.setJobName("Kmeans-Main");
+			conf.setJobName("Kmeans-Main iteation " + iteration);
 
 			conf.setOutputKeyClass(IntWritable.class);
 			conf.setOutputValueClass(Text.class);
@@ -462,11 +514,11 @@ public class NaiveKmeans {
 
 			conf.setMapperClass(KmeansMapper.class);
 			conf.setReducerClass(KmeansReducer.class);
-			conf.setInputFormat(SequenceFileInputFormat.class);
+			conf.setInputFormat(KeyValueTextInputFormat.class);
 			conf.setOutputFormat(TextOutputFormat.class);
 			conf.set("kmeans.init.center.dir", output + "/iteration-" + (iteration-1));
 
-			FileInputFormat.setInputPaths(conf, new Path(output + "/initdata"));
+			FileInputFormat.setInputPaths(conf, new Path(input));
 			FileOutputFormat.setOutputPath(conf, new Path(output + "/iteration-" + (iteration)));
 			conf.setNumReduceTasks(partitions);
 
@@ -478,7 +530,7 @@ public class NaiveKmeans {
 			/******************** Kmeans Terminate Check Job ***********************/
 
 			conf = new JobConf(NaiveKmeans.class);
-			conf.setJobName("Kmeans-TermCheck");
+			conf.setJobName("Kmeans-TermCheck " + iteration);
 
 			conf.setOutputKeyClass(Text.class);
 			conf.setOutputValueClass(FloatWritable.class);
@@ -502,8 +554,8 @@ public class NaiveKmeans {
 			
 			Util.writeLog("naive.kmeans.log", "iteration computation " + iteration + " takes " + itertime + " s, include termination check takes " + totaltime);
 			
-		} while (iteration < maxiteration);
+		} while (iteration < max_iterations);
+		
+		return 1;
     }
-
-
 }
