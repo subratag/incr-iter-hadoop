@@ -24,11 +24,13 @@ import org.apache.hadoop.examples.incremental.ComPageRank;
 import org.apache.hadoop.examples.incremental.CompSeqFile;
 import org.apache.hadoop.examples.incremental.IncrPageRank;
 import org.apache.hadoop.examples.incremental.UpdatePageRankGraph;
-import org.apache.hadoop.examples.iterative.Kmeans;
+import org.apache.hadoop.examples.iterative.IterKmeans;
+import org.apache.hadoop.examples.iterative.IterKmeans_Lastfm;
 import org.apache.hadoop.examples.iterative.MatrixVector;
 import org.apache.hadoop.examples.iterative.PageRank;
 import org.apache.hadoop.examples.iterative.PreProcess;
 import org.apache.hadoop.examples.naive.NaiveKmeans;
+import org.apache.hadoop.examples.naive.NaiveKmeans_Lastfm;
 import org.apache.hadoop.examples.naive.NaiveMatrixVectorMultiplication;
 import org.apache.hadoop.examples.naive.NaivePageRank;
 import org.apache.hadoop.examples.naive.Test;
@@ -84,11 +86,13 @@ public class ExampleDriver {
       //for native iterative computation
       pgd.addClass("naivepagerank", NaivePageRank.class, "naive pagerank");
       pgd.addClass("naivekmeans", NaiveKmeans.class, "naive kmeans");
+      pgd.addClass("naivekmeans_lastfm", NaiveKmeans_Lastfm.class, "naive kmeans for lastfm raw data");
       pgd.addClass("naivematrixvector", NaiveMatrixVectorMultiplication.class, "naive matrix vector multiplication");
       
       //for iterative jobs
       pgd.addClass("iterpagerank", PageRank.class, "iterative pagerank");
-      pgd.addClass("iterkmeans", Kmeans.class, "iterative kmeans");
+      pgd.addClass("iterkmeans", IterKmeans.class, "iterative kmeans");
+      pgd.addClass("iterkmeans", IterKmeans_Lastfm.class, "iterative kmeans for lastfm raw data");
       pgd.addClass("itermatrixvector", MatrixVector.class, "iterative matrix vector multiplication");
 
       //update graph

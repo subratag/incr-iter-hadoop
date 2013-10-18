@@ -39,6 +39,7 @@ import org.apache.hadoop.mapred.IterativeReducer;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobConfigurable;
+import org.apache.hadoop.mapred.KeyValueTextInputFormat;
 import org.apache.hadoop.mapred.LineRecordReader;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
@@ -55,7 +56,7 @@ import org.apache.hadoop.mapred.lib.IntFloatKVLineRecordReader;
 import org.apache.hadoop.mapred.lib.IntTextKVInputFormat;
 import org.mortbay.log.Log;
 
-public class Kmeans {
+public class IterKmeans {
 
 	public static final int DIM = 10;
 	
@@ -180,22 +181,12 @@ public class Kmeans {
 
 	
 	public static class DistributeDataMap extends MapReduceBase 
-	 	implements Mapper<LongWritable, Text, IntWritable, Text> {
+	 	implements Mapper<Text, Text, IntWritable, Text> {
 	
-		public void map(LongWritable key, Text value,
+		public void map(Text key, Text value,
 				OutputCollector<IntWritable, Text> output, Reporter reporter)
 				throws IOException {
-			String line = value.toString();
-			String[] items = line.split("\t");
-			if(items.length != 4) {
-				reporter.setStatus("Doesn't work:"+line);
-				return;
-			}
-			int keyToEmit = items[0].hashCode();
-			int artistid = items[1].hashCode();
-			int plays = Integer.parseInt(items[3].trim());
-			Text valueToEmit = new Text(String.valueOf(artistid) + "," + plays);
-			output.collect(new IntWritable(keyToEmit), valueToEmit);
+			output.collect(new IntWritable(Integer.parseInt(key.toString())), value);
 		}
 	}
 	
@@ -218,39 +209,26 @@ public class Kmeans {
 		public void reduce(IntWritable key, Iterator<Text> values,
 				OutputCollector<IntWritable, Text> output, Reporter report) throws IOException {
 			
-			//input key: user-id
-			//input value: artist-id,plays
-			//output key: user-id
-			//output value: all artist-id,plays tuples seperated by semicolon
-			
-			TreeMap<Integer, Integer> artists = new TreeMap<Integer, Integer>();
+			TreeMap<Integer, Integer> dims = new TreeMap<Integer, Integer>();
+			Text value = new Text();
 			while(values.hasNext()) {
+				value = values.next();
 				String[] items = (((Text)values.next()).toString()).split(",");
-				int artistid = Integer.parseInt(items[0]);
-				int dim = Math.abs(artistid) % DIM;
+				int dim_id = Integer.parseInt(items[0]);
 				int plays = Integer.parseInt(items[1]);
 				
-				if(artists.containsKey(dim)){
-					artists.put(dim, artists.get(dim) + plays);
+				if(dims.containsKey(dim_id)){
+					dims.put(dim_id, dims.get(dim_id) + plays);
 				}else{
-					artists.put(dim, plays);
+					dims.put(dim_id, plays);
 				}			
-			}
-	
-			//ensure dimension is DIM
-			if(artists.size() < DIM){
-				for(int i=0; i< DIM; i++){
-					if(artists.get(i) == null){
-						artists.put(i, 0);
-					}
-				}
 			}
 			
 			StringBuilder builder = new StringBuilder();
-			Iterator<Integer> it = artists.keySet().iterator();
+			Iterator<Integer> it = dims.keySet().iterator();
 			while(it.hasNext()) {
 				Integer artistID = it.next();
-				int plays = artists.get(artistID);
+				int plays = dims.get(artistID);
 				builder.append(artistID);
 				builder.append(",");
 				builder.append(plays);
@@ -259,16 +237,22 @@ public class Kmeans {
 			}
 			
 			String toOutput = builder.toString();
-			output.collect(key, new Text(toOutput));
+			
 			
 			//randomly collect initial centers, only one reducer collect
 			if(Util.getTaskId(conf) == 0 && (initCenters.size() < k) && (key.get() % 2 == 0)){
 				TreeMap<Integer, Double> center = new TreeMap<Integer, Double>();
-				
-				for(Map.Entry<Integer, Integer> entry : artists.entrySet()){
-					center.put(entry.getKey(), (double)entry.getValue());
+				String[] items = value.toString().split(" ");
+				for(String item : items){
+	    			int index = item.indexOf(",");
+	    			if(index == -1){
+	    				throw new IOException("wrong user data " + key);
+	    			}
+	    			
+	    			int dim_id = Integer.parseInt(item.substring(0, index));
+	    			int dim_value = Integer.parseInt(item.substring(index+1));
+	    			center.put(dim_id, (double)dim_value);
 				}
-				
 				initCenters.put(new IntWritable(centerIndex), new CenterWritable(center));
 				centerIndex++;
 			}
@@ -563,13 +547,13 @@ public class Kmeans {
 	    
 	    long initstart = System.currentTimeMillis();
 	    
-	    JobConf job1 = new JobConf(Kmeans.class);
+	    JobConf job1 = new JobConf(IterKmeans.class);
 	    String jobname1 = "Kmeans Init";
 	    job1.setJobName(jobname1);
 	    
 	    job1.setDataDistribution(true);
 	    job1.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-	    job1.setInputFormat(TextInputFormat.class);
+	    job1.setInputFormat(KeyValueTextInputFormat.class);
 	    job1.setOutputFormat(TextOutputFormat.class);
 	    TextInputFormat.addInputPath(job1, new Path(inStatic));
 	    FileOutputFormat.setOutputPath(job1, new Path(output + "/substatic"));
@@ -606,7 +590,7 @@ public class Kmeans {
 	    while(cont && iteration < max_iterations){
 	    	long iterstart = System.currentTimeMillis();
 	    	
-		    JobConf job = new JobConf(Kmeans.class);
+		    JobConf job = new JobConf(IterKmeans.class);
 		    String jobname = "Kmeans Main " + iteration;
 		    job.setJobName(jobname);
 	    

@@ -217,7 +217,9 @@ public class PageRank {
 
 	public static int main(String[] args) throws Exception {
 		if (args.length < 2) {
-			return -1;
+			System.out.println("ERROR: Wrong Input Parameters!");
+	        printUsage();
+	        return -1;
 		}
 		
 		int partitions = 0;
