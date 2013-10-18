@@ -20,6 +20,7 @@ import org.apache.hadoop.examples.iterative.Util;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
@@ -40,6 +41,7 @@ import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.mapred.lib.IdentityMapper;
+import org.mortbay.log.Log;
 
 
 public class NaiveKmeans {
@@ -115,6 +117,7 @@ public class NaiveKmeans {
 		private BufferedWriter clusterWriter;
 		private int count = 0;
 		private OutputCollector<IntWritable, Text> outCollector;
+		private TreeMap<Integer, Double> centernorm = new TreeMap<Integer, Double>();
 		//private HashMap<Integer, Integer> tt = new HashMap<Integer, Integer>();
 		
 		private void loadInitCenters(JobConf job, String centersDir) throws IOException{
@@ -126,6 +129,7 @@ public class NaiveKmeans {
 		    
 		    int center_id = 0;
 		    for(FileStatus file : files){
+		    	double norm1 = 0;
 		    	if(!file.isDir()){
 		    		Path filePath = file.getPath();
 			    	BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(filePath)));
@@ -147,9 +151,11 @@ public class NaiveKmeans {
 			    			double dim_value = Double.parseDouble(dim.substring(index+1));
 			    			
 			    			dimensions.put(dim_id, dim_value);
+			    			norm1 += dim_value * dim_value;
 			    		}
 			    		
-			    		centers.put(center_id++, dimensions);
+			    		centers.put(center_id, dimensions);
+			    		centernorm.put(center_id, norm1);
 			    	}
 			    	br.close();
 		    	}
@@ -171,34 +177,17 @@ public class NaiveKmeans {
 			}
 		}
 		
-		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second){
+		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second, double norm1){
 			double cosine_sim = 0;
-			double norm1 = 0;
 			double norm2 = 0;
 			
-			HashSet<Integer> keys = new HashSet<Integer>();
-			keys.addAll(first.keySet());
-			keys.addAll(second.keySet());
-			
-			for(int key : keys){
-				double dim_value1;
-				int dim_value2;
-				
-				if(first.containsKey(key)){
-					dim_value1 = first.get(key);
-					norm1 += dim_value1 * dim_value1;
-				}else{
-					dim_value1 = 0;
+			for(Map.Entry<Integer, Integer> entry : second.entrySet()){
+				Double dim_value1 = first.get(entry.getKey());
+				if(dim_value1 != null){
+					cosine_sim += dim_value1 * entry.getValue();
 				}
 				
-				if(second.containsKey(key)){
-					dim_value2 = second.get(key);
-					norm2 += dim_value2 * dim_value2;
-				}else{
-					dim_value2 = 0;
-				}
-				
-				cosine_sim += dim_value1 * dim_value2;
+				norm2 *= entry.getValue() * entry.getValue();
 			}
 			
 			cosine_sim = cosine_sim / (Math.sqrt(norm1) * Math.sqrt(norm2));
@@ -213,13 +202,15 @@ public class NaiveKmeans {
     			String element = st.nextToken();
     			int index = element.indexOf(",");
     			if(index == -1){
-    				throw new IOException("wrong user data " + line);
+    				Log.info("no , found in line " + line);
+    				continue;
     			}
     			
-    			int dim_id = Integer.parseInt(element.substring(0, index));
-    			int dim_value = Integer.parseInt(element.substring(index+1));
-    			
-    			item_dims.put(dim_id, dim_value);
+    			try{
+    				int dim_id = Integer.parseInt(element.substring(0, index));
+        			int dim_value = Integer.parseInt(element.substring(index+1));
+        			item_dims.put(dim_id, dim_value);
+    			}catch (NumberFormatException e){}
     		}
     		
     		return item_dims;
@@ -246,7 +237,7 @@ public class NaiveKmeans {
 			for(Map.Entry<Integer, TreeMap<Integer, Double>> mean : centers.entrySet()){
 				int centerid = mean.getKey();
 				TreeMap<Integer, Double> centerdata = mean.getValue();
-				double similarity = similarity(centerdata, item_dims);
+				double similarity = similarity(centerdata, item_dims, centernorm.get(centerid));
 
 				if(similarity > maxSim) {
 					maxSim = similarity;
@@ -281,18 +272,21 @@ public class NaiveKmeans {
 	    			String element = st.nextToken();
 	    			int index = element.indexOf(",");
 	    			if(index == -1){
-	    				throw new IOException("wrong user data " + key);
+	    				Log.info("no , found in line " + line);
+	    				continue;
 	    			}
 	    			
-	    			int dim_id = Integer.parseInt(element.substring(0, index));
-	    			int dim_value = Integer.parseInt(element.substring(index+1));
-	    			
-	    			Integer oldv = center_dims.get(dim_id);
-	    			if(oldv == null){
-	    				center_dims.put(dim_id, dim_value);
-	    			}else{
-	    				center_dims.put(dim_id, center_dims.get(dim_id) + dim_value);
-	    			}
+	    			try{
+		    			int dim_id = Integer.parseInt(element.substring(0, index));
+		    			int dim_value = Integer.parseInt(element.substring(index+1));
+		    			
+		    			Integer oldv = center_dims.get(dim_id);
+		    			if(oldv == null){
+		    				center_dims.put(dim_id, dim_value);
+		    			}else{
+		    				center_dims.put(dim_id, oldv + dim_value);
+		    			}
+	    			}catch (NumberFormatException e){}
 	    		}
 				num++;
 			}
@@ -314,14 +308,14 @@ public class NaiveKmeans {
 	 */
 
 	public static class TermCheckReducer extends MapReduceBase
-		implements Reducer<Text, Text, Text, FloatWritable> {
+		implements Reducer<Text, Text, Text, DoubleWritable> {
 	
-		private OutputCollector<Text, FloatWritable> collector;
-		private float change = 0;
+		private OutputCollector<Text, DoubleWritable> collector;
+		private double change = 0;
 
 		@Override
 		public void reduce(Text key, Iterator<Text> values,
-				OutputCollector<Text, FloatWritable> output, Reporter reporter)
+				OutputCollector<Text, DoubleWritable> output, Reporter reporter)
 				throws IOException {
 			if(collector == null) collector = output;
 			int i = 0;
@@ -368,35 +362,22 @@ public class NaiveKmeans {
 					keys.addAll(center_dims1.keySet());
 					keys.addAll(center_dims2.keySet());
 					
-					for(int dim_id : keys){
-						double dim_value1;
-						double dim_value2;
-						
-						if(center_dims1.containsKey(dim_id)){
-							dim_value1 = center_dims1.get(dim_id);
-						}else{
-							dim_value1 = 0;
+					for(Map.Entry<Integer, Double> entry : center_dims2.entrySet()){
+						Double dim_value1 = center_dims1.get(entry.getKey());
+						Double dim_value2 = entry.getValue();
+						if(dim_value1 != null){
+							distance += (dim_value1 - dim_value2) * (dim_value1 - dim_value2);
 						}
-						
-						if(center_dims2.containsKey(dim_id)){
-							dim_value2 = center_dims2.get(dim_id);
-						}else{
-							dim_value2 = 0;
-						}
-						
-						distance += (dim_value1 - dim_value2) * (dim_value1 - dim_value2);
-						System.out.println("(" + dim_value1 + "-" + dim_value2 + ")^2= " + ((dim_value1 - dim_value2) * (dim_value1 - dim_value2)));
-					
 					}
 					System.out.println("total : " + distance);
 				}		
 			}
-			change += Math.sqrt(distance);
+			change += distance;
 		}
 		
 		@Override
 		public void close() throws IOException{
-			collector.collect(new Text("sub change"), new FloatWritable(change));
+			collector.collect(new Text("sub change"), new DoubleWritable(Math.sqrt(change)));
 		}
 	}
 	
