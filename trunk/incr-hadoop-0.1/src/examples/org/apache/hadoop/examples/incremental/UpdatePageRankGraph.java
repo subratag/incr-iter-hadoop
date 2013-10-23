@@ -23,17 +23,9 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
+import org.apache.hadoop.mapred.lib.IdentityMapper;
 
 public class UpdatePageRankGraph {
-	public static class UpdateDataMap extends MapReduceBase implements
-		Mapper<LongWritable, Text, LongWritable, Text> {
-	
-		public void map(LongWritable key, Text value,
-				OutputCollector<LongWritable, Text> output, Reporter reporter)
-				throws IOException {
-			output.collect(key, value);
-		}
-	}
 	
 	public static class UpdateDataReduce extends MapReduceBase implements
 		Reducer<LongWritable, Text, LongWritable, Text> {
@@ -156,7 +148,7 @@ public class UpdatePageRankGraph {
 	}
 	
 	private static void printUsage() {
-		System.out.println("incrpagerank <OldStatic> <UpdateGraph> <DeltaGraph><outDir> " +
+		System.out.println("updatepr <OldStatic> <UpdateGraph> <DeltaGraph> " +
 				"<partitions> <change percent> <contain delete> <totalnum>");
 	}
 
@@ -188,7 +180,7 @@ public class UpdatePageRankGraph {
 	    FileInputFormat.addInputPath(job0, new Path(oldStatic));
 	    FileOutputFormat.setOutputPath(job0, new Path(updateoutput));
 
-	    job0.setMapperClass(UpdateDataMap.class);
+	    job0.setMapperClass(IdentityMapper.class);
 	    job0.setReducerClass(UpdateDataReduce.class);
 
 	    job0.setOutputKeyClass(LongWritable.class);

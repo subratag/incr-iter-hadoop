@@ -209,51 +209,53 @@ public class IterKmeans {
 		public void reduce(IntWritable key, Iterator<Text> values,
 				OutputCollector<IntWritable, Text> output, Reporter report) throws IOException {
 			
+			/*
 			TreeMap<Integer, Integer> dims = new TreeMap<Integer, Integer>();
 			Text value = new Text();
 			while(values.hasNext()) {
 				value = values.next();
 				String[] items = (((Text)values.next()).toString()).split(",");
 				int dim_id = Integer.parseInt(items[0]);
-				int plays = Integer.parseInt(items[1]);
+				int dim_value = Integer.parseInt(items[1]);
 				
 				if(dims.containsKey(dim_id)){
-					dims.put(dim_id, dims.get(dim_id) + plays);
+					dims.put(dim_id, dims.get(dim_id) + dim_value);
 				}else{
-					dims.put(dim_id, plays);
+					dims.put(dim_id, dim_value);
 				}			
 			}
 			
 			StringBuilder builder = new StringBuilder();
-			Iterator<Integer> it = dims.keySet().iterator();
-			while(it.hasNext()) {
-				Integer artistID = it.next();
-				int plays = dims.get(artistID);
-				builder.append(artistID);
-				builder.append(",");
-				builder.append(plays);
-				if(it.hasNext())
-					builder.append(" ");
+			for(Map.Entry<Integer, Integer> entry : dims.entrySet()){
+				int dim_id = entry.getKey();
+				int dim_value = entry.getValue();
+				
+				builder.append(dim_id + "," + dim_value + " ");
 			}
 			
 			String toOutput = builder.toString();
+			*/
 			
-			//randomly collect initial centers, only one reducer collect
-			if(Util.getTaskId(conf) == 0 && (initCenters.size() < k) && (key.get() % 2 == 0)){
-				TreeMap<Integer, Double> center = new TreeMap<Integer, Double>();
-				String[] items = value.toString().split(" ");
-				for(String item : items){
-	    			int index = item.indexOf(",");
-	    			if(index == -1){
-	    				throw new IOException("wrong user data " + key);
-	    			}
-	    			
-	    			int dim_id = Integer.parseInt(item.substring(0, index));
-	    			int dim_value = Integer.parseInt(item.substring(index+1));
-	    			center.put(dim_id, (double)dim_value);
+			while(values.hasNext()) {
+				output.collect(key, values.next());	
+				
+				//randomly collect initial centers, only one reducer collect
+				if(Util.getTaskId(conf) == 0 && (initCenters.size() < k) && (key.get() % 2 == 0)){
+					TreeMap<Integer, Double> center = new TreeMap<Integer, Double>();
+					String[] items = value.toString().split(" ");
+					for(String item : items){
+		    			int index = item.indexOf(",");
+		    			if(index == -1){
+		    				throw new IOException("wrong user data " + key);
+		    			}
+		    			
+		    			int dim_id = Integer.parseInt(item.substring(0, index));
+		    			int dim_value = Integer.parseInt(item.substring(index+1));
+		    			center.put(dim_id, (double)dim_value);
+					}
+					initCenters.put(new IntWritable(centerIndex), new CenterWritable(center));
+					centerIndex++;
 				}
-				initCenters.put(new IntWritable(centerIndex), new CenterWritable(center));
-				centerIndex++;
 			}
 		}
 	
@@ -269,7 +271,6 @@ public class IterKmeans {
 				System.out.println(initCenters.size());
 				
 				bw.write(new GlobalUniqKeyWritable() + "\t" + initCenters);
-				
 				bw.close();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -295,7 +296,7 @@ public class IterKmeans {
 					cosine_sim += dim_value1 * entry.getValue();
 				}
 				
-				norm2 *= entry.getValue() * entry.getValue();
+				norm2 += entry.getValue() * entry.getValue();
 			}
 			
 			cosine_sim = cosine_sim / (Math.sqrt(norm1) * Math.sqrt(norm2));
@@ -349,7 +350,6 @@ public class IterKmeans {
 			double maxSim = -1;
 			int simcluster = -1;
 			for(Map.Entry<Integer, TreeMap<Integer, Double>> mean : centers.entrySet()){
-
 				int centerid = mean.getKey();
 				TreeMap<Integer, Double> centerdata = mean.getValue();
 				double similarity = similarity(centerdata, item_dims, centernorm.get(centerid));
