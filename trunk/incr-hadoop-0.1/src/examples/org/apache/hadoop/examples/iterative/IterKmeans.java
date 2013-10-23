@@ -238,7 +238,6 @@ public class IterKmeans {
 			
 			String toOutput = builder.toString();
 			
-			
 			//randomly collect initial centers, only one reducer collect
 			if(Util.getTaskId(conf) == 0 && (initCenters.size() < k) && (key.get() % 2 == 0)){
 				TreeMap<Integer, Double> center = new TreeMap<Integer, Double>();
@@ -283,18 +282,25 @@ public class IterKmeans {
 		IterativeMapper<IntWritable, Text, GlobalUniqKeyWritable, GlobalUniqValueWritable, IntWritable, Text> {
 	
 		private Map<Integer, TreeMap<Integer, Double>> centers = null;
+		private TreeMap<Integer, Double> centernorm = new TreeMap<Integer, Double>();
 		private int count = 0;
 		
-		private double distance(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second){
-			double distance = 0;
-			for(int key : first.keySet()){
-				double score1 = first.get(key);
-				int score2 = second.get(key);
+		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second, double norm1){
+			double cosine_sim = 0;
+			double norm2 = 0;
+			
+			for(Map.Entry<Integer, Integer> entry : second.entrySet()){
+				Double dim_value1 = first.get(entry.getKey());
+				if(dim_value1 != null){
+					cosine_sim += dim_value1 * entry.getValue();
+				}
 				
-				distance += (score1 - score2) * (score1 - score2);
+				norm2 *= entry.getValue() * entry.getValue();
 			}
 			
-			return Math.sqrt(distance);
+			cosine_sim = cosine_sim / (Math.sqrt(norm1) * Math.sqrt(norm2));
+			
+			return cosine_sim;
 		}
 		
 		@Override
@@ -310,13 +316,21 @@ public class IterKmeans {
 					int centerid = ((IntWritable)entry.getKey()).get();
 					TreeMap<Integer, Double> centerdata = ((CenterWritable)entry.getValue()).get();
 					centers.put(centerid, centerdata);
+					
+					//compute the norms
+					double norm = 0;
+					for(Map.Entry<Integer, Double> entry2 : centerdata.entrySet()){
+						norm += entry2.getValue() * entry2.getValue();
+					}
+					
+					centernorm.put(centerid, norm);
 				}
 			}
 			
 			count++;
 			reporter.setStatus(String.valueOf(count));
 
-			TreeMap<Integer, Integer> artists = new TreeMap<Integer, Integer>();
+			TreeMap<Integer, Integer> item_dims = new TreeMap<Integer, Integer>();
 			String line = staticval.toString();
     		StringTokenizer st = new StringTokenizer(line);
     		while(st.hasMoreTokens()){
@@ -326,28 +340,27 @@ public class IterKmeans {
     				throw new IOException("wrong user data " + statickey);
     			}
     			
-    			int artistid = Integer.parseInt(element.substring(0, index));
-    			int playtimes = Integer.parseInt(element.substring(index+1));
+    			int dim_id = Integer.parseInt(element.substring(0, index));
+    			int dim_value = Integer.parseInt(element.substring(index+1));
     			
-    			artists.put(artistid, playtimes);
+    			item_dims.put(dim_id, dim_value);
     		}
 			
-			double minDistance = Double.MAX_VALUE;
+			double maxSim = -1;
 			int simcluster = -1;
 			for(Map.Entry<Integer, TreeMap<Integer, Double>> mean : centers.entrySet()){
 
 				int centerid = mean.getKey();
 				TreeMap<Integer, Double> centerdata = mean.getValue();
-				double distance = distance(centerdata, artists);
+				double similarity = similarity(centerdata, item_dims, centernorm.get(centerid));
 
-				if(distance < minDistance) {
-					minDistance = distance;
+				if(similarity > maxSim) {
+					maxSim = similarity;
 					simcluster = centerid;
 				}
 			}
 
 			output.collect(new IntWritable(simcluster), staticval);
-			
 		}
 
 		@Override
@@ -368,7 +381,7 @@ public class IterKmeans {
 			//input value: user-id data
 
 			int num = 0;
-			TreeMap<Integer, Integer> totalartist = new TreeMap<Integer, Integer>();
+			TreeMap<Integer, Integer> all_items = new TreeMap<Integer, Integer>();
 			//System.out.println("input key is: " + key);
 			while(values.hasNext()) {		
 				String line = values.next().toString();
@@ -381,28 +394,28 @@ public class IterKmeans {
 	    				throw new IOException("wrong user data " + key);
 	    			}
 	    			
-	    			int artistid = Integer.parseInt(element.substring(0, index));
-	    			int playtimes = Integer.parseInt(element.substring(index+1));
+	    			int dim_id = Integer.parseInt(element.substring(0, index));
+	    			int dim_value = Integer.parseInt(element.substring(index+1));
 	    			
-	    			Integer oldv = totalartist.get(artistid);
+	    			Integer oldv = all_items.get(dim_id);
 	    			if(oldv == null){
-	    				totalartist.put(artistid, playtimes);
+	    				all_items.put(dim_id, dim_value);
 	    			}else{
-	    				totalartist.put(artistid, totalartist.get(artistid) + playtimes);
+	    				all_items.put(dim_id, all_items.get(dim_id) + dim_value);
 	    			}
 	    		}
 				num++;
 			}
 
-			TreeMap<Integer, Double> avgartist = new TreeMap<Integer, Double>();
-			for(Map.Entry<Integer, Integer> entry : totalartist.entrySet()){
-				int artist = entry.getKey();
-				int value = entry.getValue();
-				double avgscore = (double)value/num;
-				avgartist.put(artist, avgscore);
+			TreeMap<Integer, Double> avg = new TreeMap<Integer, Double>();
+			for(Map.Entry<Integer, Integer> entry : all_items.entrySet()){
+				int dim_id = entry.getKey();
+				int dim_value = entry.getValue();
+				double avgscore = (double)dim_value/num;
+				avg.put(dim_id, avgscore);
 			}
 			
-			output.collect(new IntWritable(key.get()), new CenterWritable(avgartist));
+			output.collect(new IntWritable(key.get()), new CenterWritable(avg));
 		}
 
 		@Override

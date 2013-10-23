@@ -135,8 +135,8 @@ public class NaiveKmeans {
 			    	BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(filePath)));
 			    	while(br.ready()){
 			    		String line = br.readLine();
-			    		String[] item = line.split("\t");
 			    		
+			    		String[] item = line.split("\t");
 			    		TreeMap<Integer, Double> dimensions = new TreeMap<Integer, Double>();
 			    		
 			    		StringTokenizer st = new StringTokenizer(item[1]);
@@ -156,10 +156,17 @@ public class NaiveKmeans {
 			    		
 			    		centers.put(center_id, dimensions);
 			    		centernorm.put(center_id, norm1);
+			    		/*
+			    		System.out.println("centerid is " + center_id + "\t");
+			    		for(Map.Entry<Integer, Double> entry : centers.get(center_id).entrySet()){
+			    			System.out.println(entry.getKey() + "\t" + entry.getValue());
+			    		}
+			    		*/
+			    		
+			    		center_id++;
 			    	}
 			    	br.close();
 		    	}
-		    	
 		    }
 		    
 		    System.out.println("center size: " + centers.size());
@@ -187,7 +194,7 @@ public class NaiveKmeans {
 					cosine_sim += dim_value1 * entry.getValue();
 				}
 				
-				norm2 *= entry.getValue() * entry.getValue();
+				norm2 += entry.getValue() * entry.getValue();
 			}
 			
 			cosine_sim = cosine_sim / (Math.sqrt(norm1) * Math.sqrt(norm2));
@@ -238,6 +245,10 @@ public class NaiveKmeans {
 				int centerid = mean.getKey();
 				TreeMap<Integer, Double> centerdata = mean.getValue();
 				double similarity = similarity(centerdata, item_dims, centernorm.get(centerid));
+				
+				//System.out.println("similarity between " + value);
+				//System.out.println("The first entry is " + item_dims.firstEntry().getKey() + "\t" + item_dims.firstEntry().getValue());
+				//System.out.println("and " + centerid + " is " + similarity);
 
 				if(similarity > maxSim) {
 					maxSim = similarity;
@@ -246,7 +257,7 @@ public class NaiveKmeans {
 			}
 
 			if(simcluster == -1){
-				System.out.println(key + "\t" + value);
+				System.out.println("similarity is smaller than -1\t" + key + "\t" + value);
 			}
 			
 			output.collect(new IntWritable(simcluster), value);
