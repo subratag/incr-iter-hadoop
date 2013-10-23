@@ -1,4 +1,4 @@
-package org.apache.hadoop.examples.naive;
+package org.apache.hadoop.examples.utils;
 
 
 import java.io.IOException;
@@ -6,6 +6,7 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.examples.iterative.PageRank;
+import org.apache.hadoop.examples.naive.Parameters;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;

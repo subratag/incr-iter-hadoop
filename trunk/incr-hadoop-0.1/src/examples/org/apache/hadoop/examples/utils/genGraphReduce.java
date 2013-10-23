@@ -1,4 +1,4 @@
-package org.apache.hadoop.examples.naive;
+package org.apache.hadoop.examples.utils;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -29,6 +29,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.examples.incremental.Util;
+import org.apache.hadoop.examples.naive.Parameters;
 
 
 public class genGraphReduce extends MapReduceBase implements

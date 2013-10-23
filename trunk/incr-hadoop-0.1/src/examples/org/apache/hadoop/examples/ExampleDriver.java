@@ -34,10 +34,11 @@ import org.apache.hadoop.examples.naive.NaiveKmeans_Lastfm;
 import org.apache.hadoop.examples.naive.NaiveMatrixVectorMultiplication;
 import org.apache.hadoop.examples.naive.NaivePageRank;
 import org.apache.hadoop.examples.naive.Test;
-import org.apache.hadoop.examples.naive.genGraph;
 import org.apache.hadoop.examples.terasort.TeraGen;
 import org.apache.hadoop.examples.terasort.TeraSort;
 import org.apache.hadoop.examples.terasort.TeraValidate;
+import org.apache.hadoop.examples.utils.TrimDimsForKM;
+import org.apache.hadoop.examples.utils.genGraph;
 import org.apache.hadoop.util.ProgramDriver;
 
 /**
@@ -80,8 +81,9 @@ public class ExampleDriver {
       
       pgd.addClass("preprocess", PreProcess.class, "preprocess");
       
-      //for generating graphs
+      //utils
       pgd.addClass("disgengraph", genGraph.class, "disgen");
+      pgd.addClass("trimdims", TrimDimsForKM.class, "trimdims");
       
       //for native iterative computation
       pgd.addClass("naivepagerank", NaivePageRank.class, "naive pagerank");
