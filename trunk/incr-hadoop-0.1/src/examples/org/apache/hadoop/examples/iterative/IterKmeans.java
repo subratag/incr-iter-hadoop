@@ -52,6 +52,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.mapred.lib.HashPartitioner;
+import org.apache.hadoop.mapred.lib.IdentityMapper;
 import org.apache.hadoop.mapred.lib.IntFloatKVLineRecordReader;
 import org.apache.hadoop.mapred.lib.IntTextKVInputFormat;
 import org.mortbay.log.Log;
@@ -179,13 +180,14 @@ public class IterKmeans {
 		  }
 	}
 
-	
+
 	public static class DistributeDataMap extends MapReduceBase 
 	 	implements Mapper<Text, Text, IntWritable, Text> {
 	
 		public void map(Text key, Text value,
 				OutputCollector<IntWritable, Text> output, Reporter reporter)
 				throws IOException {
+			//System.out.println(key + "\t" + value);
 			output.collect(new IntWritable(Integer.parseInt(key.toString())), value);
 		}
 	}
@@ -236,8 +238,11 @@ public class IterKmeans {
 			String toOutput = builder.toString();
 			*/
 			
+			//System.out.println(key + "\t" + values.next());
+			
 			while(values.hasNext()) {
-				output.collect(key, values.next());	
+				Text value = values.next();
+				output.collect(key, value);	
 				
 				//randomly collect initial centers, only one reducer collect
 				if(Util.getTaskId(conf) == 0 && (initCenters.size() < k) && (key.get() % 2 == 0)){
@@ -501,7 +506,7 @@ public class IterKmeans {
 	}
 
 	private static void printUsage() {
-		System.out.println("kmeans [-p partitions] <inStaticDir> <outDir> <initcenter path> <k>");
+		System.out.println("iterkmeans [-p partitions] <inStaticDir> <outDir> <k>");
 		System.out.println(	"\t-p # of parittions\n" +
 							"\t-i snapshot interval\n" +
 							"\t-I # of iterations\n");
@@ -571,7 +576,7 @@ public class IterKmeans {
 	    TextInputFormat.addInputPath(job1, new Path(inStatic));
 	    FileOutputFormat.setOutputPath(job1, new Path(output + "/substatic"));
 	    job1.setInt("kmeans.cluster.k", k);
-	    job1.set("kmeans.init.center.path", output + "/init_centers");
+	    job1.set("kmeans.init.center.path", output + "/centers/iteration-0");
 
 	    job1.setMapperClass(DistributeDataMap.class);
 		job1.setReducerClass(DistributeDataReduce.class);
@@ -624,7 +629,7 @@ public class IterKmeans {
 		    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
 		    FileOutputFormat.setOutputPath(job, new Path(output + "/iteration-" + iteration));
 		    job.setGlobalUniqValuePath(output + "/centers");
-		    job.set("kmeans.init.center.path", output + "/init_centers");
+		    job.set("kmeans.init.center.path", output + "/centers/iteration-" + (iteration-1));
 
 		    if(max_iterations == Integer.MAX_VALUE){
 		    	job.setDistanceThreshold(1);
