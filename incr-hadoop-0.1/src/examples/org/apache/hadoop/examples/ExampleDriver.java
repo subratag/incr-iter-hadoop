@@ -94,7 +94,7 @@ public class ExampleDriver {
       //for iterative jobs
       pgd.addClass("iterpagerank", PageRank.class, "iterative pagerank");
       pgd.addClass("iterkmeans", IterKmeans.class, "iterative kmeans");
-      pgd.addClass("iterkmeans", IterKmeans_Lastfm.class, "iterative kmeans for lastfm raw data");
+      pgd.addClass("iterkmeans_lastfm", IterKmeans_Lastfm.class, "iterative kmeans for lastfm raw data");
       pgd.addClass("itermatrixvector", MatrixVector.class, "iterative matrix vector multiplication");
 
       //update graph

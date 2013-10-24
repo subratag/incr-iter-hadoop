@@ -4,11 +4,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
-import org.apache.hadoop.examples.incremental.UpdatePageRankGraph.UpdateDataMap;
-import org.apache.hadoop.examples.incremental.UpdatePageRankGraph.UpdateDataReduce;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -32,43 +31,44 @@ import org.apache.hadoop.mapred.lib.IntTextKVInputFormat;
 
 public class UpdateKmeansData {
 
+	public static final int DEFAULT_DIM_NUM = 10;
+	public static final int DEFAULT_VALUE_RANGE = 100;
+	
 	public static class UpdateDataReduce extends MapReduceBase implements
 		Reducer<IntWritable, Text, IntWritable, Text> {
 		
 		private Random rand = new Random();
-		private OutputCollector<LongWritable, Text> collector = null;
-		private long lastkey;
-		private double changepercent;
-		private int addpages = 0;
-		private Set<Long> deletelist = new HashSet<Long>();
-		private IFile.TrippleWriter<LongWritable, Text, Text> writer;
-		private boolean delete;
-		private int totalnum;
+		private OutputCollector<IntWritable, Text> collector = null;
+		private int lastkey;
+		private double change_percent;
+		private double delete_percent;
+		private double add_percent;
+		
+		private int possible_dims;
+		private int dimvalue_range;
+		private int total_keys;
+		private IFile.TrippleWriter<IntWritable, Text, Text> writer;
 		private JobConf conf;
 		
 		@Override
 		public void configure(JobConf job){
 			conf = job;
-			changepercent = job.getFloat("incr.pagerank.change.percent", -1);
-			delete = job.getBoolean("pagerank.delta.contain.delete", false);
-			if(delete){
-				for(int i=0; i<10; i++){
-					deletelist.add((long)100*i);
-				}
-			}
-			totalnum = job.getInt("pagerank.delta.totalnum", -1);
-	
+			change_percent = job.getFloat("incr.kmeans.update.percent", -1);
+			delete_percent = job.getFloat("incr.kmeans.delete.percent", -1);
+			add_percent = job.getFloat("incr.kmeans.add.percent", -1);
+			possible_dims = job.getInt("incr.kmeans.dim.num", -1);
+			dimvalue_range = job.getInt("incr.kmeans.dimvalue.range", -1);
+			
 			FileSystem fs;
 			try {
 				fs = FileSystem.get(job);
-				Path deltapath = new Path(job.get("pagerank.delta.update.path") + "/part-" + Util.getTaskId(job));
-				writer = new IFile.TrippleWriter<LongWritable, Text, Text>(job, fs, deltapath, 
-						LongWritable.class, Text.class, Text.class, null, null);
+				Path deltapath = new Path(job.get("kmeans.delta.update.path") + "/part-" + Util.getTaskId(job));
+				writer = new IFile.TrippleWriter<IntWritable, Text, Text>(job, fs, deltapath, 
+						IntWritable.class, Text.class, Text.class, null, null);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-	
 		}
 		
 		@Override
@@ -86,67 +86,72 @@ public class UpdateKmeansData {
 			
 			//System.out.println("input: " + key + "\t" + outputv);
 			
-			if(deletelist.contains(key.get())){
-				//System.out.println(key + "\t" + outputv + "\t-");
-				writer.append(key, new Text(outputv), new Text("-"));
-				return;
-			}
-			
-			//randomlly change the linklist
-			if(rand.nextDouble() < changepercent /*&& outputv.indexOf("0 ") == -1*/){
-				//boolean change_type = rand.nextBoolean();		//update or add
-				boolean change_type = true;
+			//randomlly change
+			if(rand.nextDouble() < change_percent ){
+				String newpoint = new String(); 
+				String[] itemstrs = outputv.split(" ");
 				
-				if(change_type){
-					//update
-					writer.append(key, new Text(outputv), new Text("-"));
-					//System.out.println(key + "\t" + outputv + "\t-");
+				int count = 0;
+				for(String itemstr : itemstrs){
+					if(count++ == 0) continue;		//leave at least one dimension
 					
-					
-					int randend = rand.nextInt(totalnum);
-					while(randend == key.get()){
-						randend = rand.nextInt(totalnum);
+					//update each dim, add or sub a random value
+					String[] item = itemstr.split(",");
+					String dim_id = item[0];
+					int dim_value = Integer.parseInt(item[1]);
+					int new_dim_value = 0;
+					if(rand.nextBoolean() == true){
+						new_dim_value = dim_value + rand.nextInt(dimvalue_range);
+						
+						newpoint += dim_id + "," + new_dim_value;
+					}else{
+						new_dim_value = dim_value - rand.nextInt(dimvalue_range);
+						if(new_dim_value > 0){
+							newpoint += dim_id + "," + new_dim_value;
+						}
 					}
-					
-					
-					//write to the new structure file
-					outputv += randend;
-					//outputv += "27";
-					
-					output.collect(key, new Text(outputv));
-					
-					//write to the delta file
-					writer.append(key, new Text(outputv), new Text("+"));
-					//System.out.println(key + "\t" + outputv + "\t+");
-				}else{
-					//add
-					addpages++;
 				}
+				output.collect(key, new Text(newpoint));
+				writer.append(key, new Text(outputv), new Text("-"));
+				writer.append(key, new Text(newpoint), new Text("+"));
+			}else if(rand.nextDouble() < delete_percent){
+				//don't output, only write to delta input
+				writer.append(key, new Text(outputv), new Text("-"));
 			}else{
 				output.collect(key, new Text(outputv));
 			}
+			
+			lastkey = key.get();
+			total_keys++;
 		}
 		
 		@Override
 		public void close() throws IOException{
-			
-			for(int i=1; i<=addpages; i++){
-				long added = lastkey + conf.getNumMapTasks();
-				//add ten random links for each node
-				ArrayList<Integer> addlinks = new ArrayList<Integer>();
-				String outputv = "";
-				for(int j=0; j<10; j++){
-					int randend = rand.nextInt(Integer.MAX_VALUE);
-					while(randend == added){
-						randend = rand.nextInt(Integer.MAX_VALUE);
-					}
-					addlinks.add(randend);
-					outputv += randend;
-				}
-				collector.collect(new LongWritable(added), new Text(outputv));
-				writer.append(new LongWritable(added), new Text(outputv), new Text("+"));
+			int addpoints_num = (int) (total_keys * add_percent);
+			for(int i=0; i<addpoints_num; i++){
+				int add_key = lastkey + conf.getNumReduceTasks();
 				
-				System.out.println(added + "\t" + outputv + "\t+");
+				//add a new point
+				int num_dim = rand.nextInt(possible_dims) + 1;
+				Set<Integer> choosed_dims = new HashSet<Integer>(num_dim);
+				
+				String point = new String(); 
+				for(int j=0; j<num_dim; j++){
+					int dim_id = rand.nextInt(possible_dims) + 1;
+					
+					while(choosed_dims.contains(dim_id)){
+						dim_id = rand.nextInt(possible_dims) + 1;
+					}
+					choosed_dims.add(dim_id);
+					
+					int dim_value = rand.nextInt(dimvalue_range) + 1;
+					point += dim_id + "," + dim_value + " ";
+				}
+				
+				collector.collect(new IntWritable(add_key), new Text(point));
+				writer.append(new IntWritable(add_key), new Text(point), new Text("+"));
+				
+				//System.out.println(added + "\t" + outputv + "\t+");
 			}
 			
 			writer.close();
@@ -154,37 +159,93 @@ public class UpdateKmeansData {
 	}
 
 	private static void printUsage() {
-		System.out.println("updatekm <OldStatic> <UpdateGraph> <DeltaGraph>" +
-				"<partitions> <change percent> <contain delete> <dim>");
+		System.out.println("updatekm <OldStatic> <UpdateGraph> <DeltaGraph>");
+		System.out.println(	"\t-p # of parittions\n" +
+							"\t-n # of possible dimentions\n" +
+							"\t-v dim_value range\n" +
+							"\t-u update percent\n" +
+							"\t-d delete percent\n" +
+							"\t-a add percent\n");
 	}
 	
 	public static int main(String[] args) throws Exception {
-		if (args.length < 7) {
-			printUsage();
-			return -1;
+		if (args.length < 3) {
+			System.out.println("ERROR: Wrong Input Parameters!");
+	        printUsage();
+	        return -1;
+		}
+		
+		int partitions = -1;
+		int possible_dims = -1;
+		int value_range = -1;
+		float update_percent = 0;
+		float delete_percent = 0;
+		float add_percent = 0;
+		
+		List<String> other_args = new ArrayList<String>();
+		for(int i=0; i < args.length; ++i) {
+		      try {
+		          if ("-p".equals(args[i])) {
+		        	partitions = Integer.parseInt(args[++i]);
+		          } else if ("-n".equals(args[i])) {
+		        	  possible_dims = Integer.parseInt(args[++i]);
+		          } else if ("-v".equals(args[i])) {
+		        	  value_range = Integer.parseInt(args[++i]);
+		          } else if ("-u".equals(args[i])) {
+		        	  update_percent = Float.parseFloat(args[++i]);
+		          } else if ("-d".equals(args[i])) {
+		        	  delete_percent = Float.parseFloat(args[++i]);
+		          } else if ("-a".equals(args[i])) {
+		        	  add_percent = Float.parseFloat(args[++i]);
+		          } else {
+		    		  other_args.add(args[i]);
+		    	  }
+		      } catch (NumberFormatException except) {
+		        System.out.println("ERROR: Integer expected instead of " + args[i]);
+		        printUsage();
+		        return -1;
+		      } catch (ArrayIndexOutOfBoundsException except) {
+		        System.out.println("ERROR: Required parameter missing from " +
+		                           args[i-1]);
+		        printUsage();
+		        return -1;
+		      }
+		}
+		
+	    if (other_args.size() < 3) {
+		      System.out.println("ERROR: Wrong number of parameters: " +
+		                         other_args.size() + ".");
+		      printUsage(); 
+		      return -1;
 		}
 	    
-	    String oldStatic = args[0];
-	    String updateoutput = args[1];
-	    String deltaoutput = args[2];
-	    int partitions = Integer.parseInt(args[3]);
-	    float changepercent = Float.parseFloat(args[4]);
-		boolean delete = Boolean.parseBoolean(args[5]);
-		int dim_num = Integer.parseInt(args[6]);
-	
-		/**
-		 * update the graph manually
-		 */
+	    String input = other_args.get(0);
+	    String update_output = other_args.get(1);
+	    String delta_output = other_args.get(2);
+	    
+	    JobConf job0 = new JobConf(UpdateKmeansData.class);
+	    
+	    if(partitions == -1){
+	    	partitions = Util.getTTNum(job0);
+	    }
+	    
+	    if(possible_dims == -1){
+	    	possible_dims = DEFAULT_DIM_NUM;
+	    }
+	    
+	    if(value_range == -1){
+	    	value_range = DEFAULT_VALUE_RANGE;
+	    }
+	    
 	    long initstart = System.currentTimeMillis();
 	    
-	    JobConf job0 = new JobConf(UpdatePageRankGraph.class);
 	    String jobname0 = "Kmeans Update Generation";
 	    job0.setJobName(jobname0);
 	    
 	    job0.setInputFormat(IntTextKVInputFormat.class);
 	    job0.setOutputFormat(TextOutputFormat.class);
-	    FileInputFormat.addInputPath(job0, new Path(oldStatic));
-	    FileOutputFormat.setOutputPath(job0, new Path(updateoutput));
+	    FileInputFormat.addInputPath(job0, new Path(input));
+	    FileOutputFormat.setOutputPath(job0, new Path(update_output));
 	
 	    job0.setMapperClass(IdentityMapper.class);
 	    job0.setReducerClass(UpdateDataReduce.class);
@@ -192,10 +253,12 @@ public class UpdateKmeansData {
 	    job0.setMapOutputKeyClass(IntWritable.class);
 	    job0.setMapOutputValueClass(Text.class);
 	    
-	    job0.setFloat("incr.kmeans.change.percent", changepercent);		//the delta change percent of update/add
-	    job0.setBoolean("kmeans.delta.contain.delete", delete);			//contain delete change or not
-	    job0.set("kmeans.delta.update.path", deltaoutput);
-	    job0.setInt("kmeans.dims", dim_num);
+	    job0.setFloat("incr.kmeans.update.percent", update_percent);		//the delta change percent of update/add
+	    job0.setFloat("incr.kmeans.delete.percent", delete_percent);
+	    job0.setFloat("incr.kmeans.add.percent", add_percent);
+	    job0.set("kmeans.delta.update.path", delta_output);
+	    job0.setInt("incr.kmeans.dim.num", possible_dims);
+	    job0.setInt("incr.kmeans.dimvalue.range", value_range);
 	
 	    job0.setNumReduceTasks(partitions);
 	    
