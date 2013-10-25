@@ -33,6 +33,7 @@ import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.GlobalDataInputFormat;
+import org.apache.hadoop.mapred.GlobalDataOutputFormat;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.IterativeMapper;
 import org.apache.hadoop.mapred.IterativeReducer;
@@ -318,6 +319,9 @@ public class IterKmeans {
 			if(centers == null){
 				centers = new HashMap<Integer, TreeMap<Integer, Double>>();
 				MapWritable rawcenters = dynamicvalue.get();
+				
+				System.out.println("read centers " + dynamicvalue.toString());
+				
 				for(Map.Entry<Writable, Writable> entry : rawcenters.entrySet()){
 					int centerid = ((IntWritable)entry.getKey()).get();
 					TreeMap<Integer, Double> centerdata = ((CenterWritable)entry.getValue()).get();
@@ -359,13 +363,40 @@ public class IterKmeans {
 				TreeMap<Integer, Double> centerdata = mean.getValue();
 				double similarity = similarity(centerdata, item_dims, centernorm.get(centerid));
 
+				if(statickey.get() == 3592){
+					System.out.println(statickey + "\tsim: " + similarity + "\t" +  centernorm.get(centerid));
+				
+					double cosine_sim = 0;
+					long norm2_sum = 0;
+					double norm2 = 0;
+					
+					for(Map.Entry<Integer, Integer> entry : item_dims.entrySet()){
+						Double dim_value1 = centerdata.get(entry.getKey());
+						if(dim_value1 != null){
+							cosine_sim += dim_value1 * entry.getValue();
+						}
+						
+						norm2_sum += entry.getValue() * entry.getValue();
+						
+						System.out.println(dim_value1 + "*" + entry.getValue() + "=" + cosine_sim + "\tnorm2 is " + norm2_sum);
+					}
+					
+					cosine_sim = cosine_sim / (Math.sqrt(centernorm.get(centerid)) * Math.sqrt(norm2_sum));
+					
+					System.out.println(cosine_sim + "\t" + Math.sqrt(centernorm.get(centerid)) + "\t" + Math.sqrt(norm2_sum));
+				}
+				
 				if(similarity > maxSim) {
 					maxSim = similarity;
 					simcluster = centerid;
 				}
 			}
 
+			if(simcluster == -1){
+				System.out.println("simcluster is -1 " + statickey + "\t" + simcluster + "\tvalue " + staticval);
+			}
 			output.collect(new IntWritable(simcluster), staticval);
+			//System.out.println("output " + statickey + "\t" + simcluster);
 		}
 
 		@Override
@@ -421,6 +452,8 @@ public class IterKmeans {
 			}
 			
 			output.collect(new IntWritable(key.get()), new CenterWritable(avg));
+			
+			System.out.println("output " + key + "\t" + avg.get(avg.firstKey()));
 		}
 
 		@Override
@@ -623,13 +656,13 @@ public class IterKmeans {
 		    job.setStaticDataPath(output + "/substatic");
 		    job.setStaticInputFormat(IntTextKVInputFormat.class);
 		    job.setDynamicInputFormat(GlobalDataInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
-		    job.setResultInputFormat(IntCenterKVInputFormat.class);
-		    job.setOutputFormat(TextOutputFormat.class);
+		    //job.setResultInputFormat(IntCenterKVInputFormat.class);
+		    job.setOutputFormat(GlobalDataOutputFormat.class);
 		    
 		    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
 		    FileOutputFormat.setOutputPath(job, new Path(output + "/iteration-" + iteration));
 		    job.setGlobalUniqValuePath(output + "/centers");
-		    job.set("kmeans.init.center.path", output + "/centers/iteration-" + (iteration-1));
+		    job.set("kmeans.init.center.path", output + "/centers/iteration-0");
 
 		    if(max_iterations == Integer.MAX_VALUE){
 		    	job.setDistanceThreshold(1);
