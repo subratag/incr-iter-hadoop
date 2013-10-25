@@ -2390,7 +2390,9 @@ class ReduceTask extends Task {
 		this.real = new LineRecordWriter<K, V>(fileOut, keyValueSeparator);	//cannot use job.getOutputFormat().getRecordWriter(), LineRecordWriter can write local files
 		*/
 		FileSystem localfs = FileSystem.getLocal(job);
+		LOG.info("I am creating " + finalName);
         this.real = job.getOutputFormat().getRecordWriter(localfs, job, finalName, reporter);
+        LOG.info("created file length " + localfs.getFileStatus(new Path(finalName)).getLen());
       }
 
       long bytesOutCurr = getOutputBytes(fsStats);
@@ -3060,6 +3062,7 @@ class ReduceTask extends Task {
     
 	//result is dump to local fs, reduce output is localkvstate, create local state data files on local fs
 	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + job.getIterationNum() + "." + this.getTaskID().getTaskID().getId());
+	LOG.info("the local output file is " + localfilename);
     final RecordWriter<OUTKEY, OUTVALUE> localOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
             reduceOutputCounter, job, reporter, localfilename, false);
     
@@ -3073,7 +3076,7 @@ class ReduceTask extends Task {
 
     OutputCollector<OUTKEY,OUTVALUE> collector;
     collector = new WrappedOutputLocalCollector<INKEY,INVALUE,OUTKEY,OUTVALUE>(
-    			localOut, reporter, termchecker);
+    					localOut, reporter, termchecker);
     
     // apply reduce function
     try {
@@ -3102,7 +3105,9 @@ class ReduceTask extends Task {
         values.nextKey();
         values.informReduceProgress();
       }
-    	  
+    
+      LOG.info("created file length " + localfs.getFileStatus(new Path(localfilename)).getLen());
+      
       //Clean up: repeated in catch block below
       reducer.close();
       localOut.close(reporter);
@@ -3296,7 +3301,7 @@ class ReduceTask extends Task {
 	}
   }
   
-  private <OUTKEY extends Writable,OUTVAL extends GlobalRecordable> void sendGlobalData(JobConf job, String localResult, TaskReporter reporter) throws IOException{
+/*  private <OUTKEY extends Writable,OUTVAL extends GlobalRecordable> void sendGlobalData(JobConf job, String localResult, TaskReporter reporter) throws IOException{
 	  FileSystem localfs = FileSystem.getLocal(job);
 	  Path localresultpath = new Path(localResult);
 	  long filelen = localfs.getFileStatus(localresultpath).getLen();
@@ -3304,7 +3309,7 @@ class ReduceTask extends Task {
 	  InputSplit inputSplit = new FileSplit(localresultpath, 0, filelen, null, true);
 	  
 	  //here, we use the result reader to read the local result
-	  RecordReader<OUTKEY, OUTVAL> resultReader = job.getResultInputFormat().getRecordReader(inputSplit, job, reporter);
+	  RecordReader<OUTKEY, OUTVAL> resultReader = job.getDynamicInputFormat().getRecordReader(inputSplit, job, reporter);
 	  
 	  GlobalUniqKeyWritable gkey = new GlobalUniqKeyWritable();
 	  GlobalUniqValueWritable gvalue = new GlobalUniqValueWritable();
@@ -3319,9 +3324,40 @@ class ReduceTask extends Task {
 		  value = resultReader.createValue();
 	  }
 	  
-	  LOG.info("global value is " + value);
+	  LOG.info("global value is " + gvalue);
 	  
 	  GlobalData globaldata = new GlobalData(gvalue, getJobID(), job.getIterationNum());
+	  //globaldata.set(value);
+	  //globaldata.setConf(job);
+	  //LOG.info("global value is " + globaldata.get());
+ 
+	  try {
+		  umbilical.transmitGlobalData(globaldata);
+	  } catch (Exception e) {
+		  e.printStackTrace();
+	  }
+
+	  resultReader.close();
+  }*/
+  
+  private void sendGlobalData(JobConf job, String localResult, TaskReporter reporter) throws IOException{
+	  FileSystem localfs = FileSystem.getLocal(job);
+	  Path localresultpath = new Path(localResult);
+	  long filelen = localfs.getFileStatus(localresultpath).getLen();
+	
+	  InputSplit inputSplit = new FileSplit(localresultpath, 0, filelen, null, true);
+	  
+	  //here, we use the result reader to read the local result
+	  RecordReader<GlobalUniqKeyWritable, GlobalUniqValueWritable> resultReader = job.getDynamicInputFormat().getRecordReader(inputSplit, job, reporter);
+	  
+	  GlobalUniqKeyWritable key = resultReader.createKey();
+	  GlobalUniqValueWritable value = resultReader.createValue();
+
+	  while(resultReader.next(key, value)){}
+	  
+	  LOG.info("global value is " + value);
+	  
+	  GlobalData globaldata = new GlobalData(value, getJobID(), job.getIterationNum());
 	  //globaldata.set(value);
 	  //globaldata.setConf(job);
 	  //LOG.info("global value is " + globaldata.get());
