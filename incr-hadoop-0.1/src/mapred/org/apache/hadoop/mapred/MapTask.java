@@ -693,54 +693,13 @@ class MapTask extends Task {
 	FileSystem localfs = FileSystem.getLocal(job);
 	
 	if(job.getStaticDataPath() == null) throw new IOException("we need input data which is usually the static data!!!");
+	
+	IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
 	Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
 	
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = getDynamicReader(job, iteration-1, projector, reporter);
 
-	//parsing the static data one by one
-	Path remoteStaticPath = new Path(job.getStaticDataPath() + "/" + getOutputName(getTaskID().getTaskID().getId()));
-	Path localStaticPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substatic." + this.getTaskID().getTaskID().getId());
-	
-    IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
-    
-    
-	//if have state data or the following job (not the first job), prepare these state data files
-	if(job.getDynamicDataPath() != null || job.getGlobalUniqValuePath() != null){
-		if(projector.getProjectType() == Projector.Type.ONE2ALL){
-			//global dynamic data, get data from hdfs
-			Path globaldatapath = new Path(job.getGlobalUniqValuePath() + "/iteration-" + (iterationNum-1));
-			
-			long globaldatalen = hdfs.getFileStatus(globaldatapath).getLen();
-			
-			InputSplit inputSplit = new FileSplit(globaldatapath, 0, globaldatalen, job);
-			dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
-		}else{
-			Path localStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + (iterationNum-1) + "." + this.getTaskID().getTaskID().getId());
-			
-			//this may happen when speculative execution enabled
-			if(!localfs.exists(localStatePath)){
-				//no state data on hdfs
-				if(job.getCheckPointInterval() != 1)
-					throw new IOException("no local dynamic data " + localStatePath);
-				
-				//have state data on hdfs
-				Path remoteStatePath = new Path(job.getDynamicDataPath() + "/" + getOutputName(getTaskID().getTaskID().getId()));
-				hdfs.copyToLocalFile(remoteStatePath, localStatePath);
-				
-				LOG.info("copy remote state file " + remoteStatePath + " to local disk" + localStatePath + "!!!!!!!!!");
-			}
-			
-			//load state data
-			long statefilelen = localfs.getFileStatus(localStatePath).getLen();
-			
-			InputSplit inputSplit = new FileSplit(localStatePath, 0, statefilelen, null, true);
-			dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
-		}
-	}
-
-
-    
     SK statickeyObject = null;
     SV staticObject = null;
     DK dynamickeyObject = null;
@@ -1585,6 +1544,12 @@ class MapTask extends Task {
 			
 			if(job.getDynamicDataPath() == null && job.getGlobalUniqValuePath() == null){
 				throw new IOException("we need the converged dynamic data to perform iterative computation!!!");
+			}else if(job.getDynamicDataPath() != null && job.getGlobalUniqValuePath() != null){
+				throw new IOException("you can not set both dynamic path and globaluniqvalue path!");
+			}
+			
+			if((projector.getProjectType() == Projector.Type.ONE2ALL) && (job.getGlobalUniqValuePath() == null)){
+				throw new IOException("one2all type, you should setGlobalUniqValuePath()! ");
 			}
 			
 			if(job.getDynamicDataPath() != null){
