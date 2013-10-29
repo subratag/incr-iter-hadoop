@@ -2171,7 +2171,7 @@ class ReduceTask extends Task {
     boolean isLocal = "local".equals(job.get("mapred.job.tracker", "local"));
 
     //the common case, for the case that is not incremental iterative app
-    if(!job.isIncrementalIterative()){
+    if(!job.isIncrementalIterative() && !job.isIterative()){
     	long time1 = System.currentTimeMillis();
         if (!isLocal) {
             reduceCopier = new ReduceCopier(umbilical, job, reporter);
@@ -2217,10 +2217,7 @@ class ReduceTask extends Task {
         Class valueClass = job.getMapOutputValueClass();
         RawComparator comparator = job.getOutputValueGroupingComparator();
         
-        if (job.isIterative()){
-        	runIterativeReducer(job, umbilical, reporter, rIter, comparator, 
-                    keyClass, valueClass);
-        }else if(job.isPreserve()){
+        if(job.isPreserve()){
         	runPreserveReducer(job, umbilical, reporter, (RawKeyValueSourceIterator)rIter, comparator, 
                     keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass());
         }else if(job.isIncrementalStart()){
@@ -2327,9 +2324,14 @@ class ReduceTask extends Task {
 	        		preserveIter = reduceCopier.createPreserveKVSIterator(job, iteration, reporter);
 	        	}
 	        	*/
-	        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, comparator, 
+	        	if (job.isIterative()){
+	            	runIterativeReducer(job, umbilical, reporter, rIter, comparator, 
+	                        keyClass, valueClass);
+	            }else if(job.isIncrementalIterative()){
+		        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, comparator, 
 	                        keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass(), incrstarttime);
-	        	
+	            }
+	            	
 	        	long time4 = System.currentTimeMillis();
 	        	
 	            LOG.info("job " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes copy phase " + (time2-time1) + " ms sort phase " + (time3-time2) + " ms reduce phase " + (time4-time3) + " ms");
