@@ -609,6 +609,14 @@ public class JobConf extends Configuration {
 	  public String getPreserveStatePath(){
 		  return get("mapred.iterative.preserve.path");
 	  }
+	  
+	  public void setConvergeStatePath(String convergepath){
+		  set("mapred.iterative.converge.path", convergepath);
+	  }
+	  
+	  public String getConvergeStatePath(){
+		  return get("mapred.iterative.converge.path");
+	  }
 	  /*
 	  public void setGlobalUniqValueClass(Class<? extends GlobalUniqValue> theClass){
 		  setClass("mapred.iterative.globaluniqvalue.class", theClass, GlobalUniqValue.class);

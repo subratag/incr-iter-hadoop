@@ -26,8 +26,8 @@ import org.apache.hadoop.examples.incremental.IncrPageRank;
 import org.apache.hadoop.examples.incremental.UpdatePageRankGraph;
 import org.apache.hadoop.examples.iterative.IterKmeans;
 import org.apache.hadoop.examples.iterative.IterKmeans_Lastfm;
+import org.apache.hadoop.examples.iterative.IterPageRank;
 import org.apache.hadoop.examples.iterative.MatrixVector;
-import org.apache.hadoop.examples.iterative.PageRank;
 import org.apache.hadoop.examples.iterative.PreProcess;
 import org.apache.hadoop.examples.naive.NaiveKmeans;
 import org.apache.hadoop.examples.naive.NaiveKmeans_Lastfm;
@@ -92,7 +92,7 @@ public class ExampleDriver {
       pgd.addClass("naivematrixvector", NaiveMatrixVectorMultiplication.class, "naive matrix vector multiplication");
       
       //for iterative jobs
-      pgd.addClass("iterpagerank", PageRank.class, "iterative pagerank");
+      pgd.addClass("iterpagerank", IterPageRank.class, "iterative pagerank");
       pgd.addClass("iterkmeans", IterKmeans.class, "iterative kmeans");
       pgd.addClass("iterkmeans_lastfm", IterKmeans_Lastfm.class, "iterative kmeans for lastfm raw data");
       pgd.addClass("itermatrixvector", MatrixVector.class, "iterative matrix vector multiplication");

@@ -186,7 +186,7 @@ public class IncrPageRank {
 	    
 	    incrstartjob.setDeltaUpdatePath(deltaStatic);				//the out dated static data
 	    incrstartjob.setPreserveStatePath(preserveState);		// the preserve map/reduce output path
-	    incrstartjob.setDynamicDataPath(convValue);				// the stable dynamic data path
+	    incrstartjob.setConvergeStatePath(convValue);				// the stable dynamic data path
 	    incrstartjob.setIncrOutputPath(output);
 	    
 	    incrstartjob.setStaticInputFormat(SequenceFileInputFormat.class);
@@ -200,7 +200,7 @@ public class IncrPageRank {
 	    incrstartjob.setOutputValueClass(FloatWritable.class);
 	    
 	    FileInputFormat.addInputPath(incrstartjob, new Path(deltaStatic));
-	    FileOutputFormat.setOutputPath(incrstartjob, new Path(output + "/" + iteration_id + "/start"));	//the filtered output dynamic data
+	    FileOutputFormat.setOutputPath(incrstartjob, new Path(output + "/" + iteration_id + "/iteration-0"));	//the filtered output dynamic data
 
 	    incrstartjob.setFilterThreshold((float)filterthreshold);
 
@@ -240,7 +240,7 @@ public class IncrPageRank {
 
 	    incriterjob.setStaticDataPath(updateStatic);				//the new static data
 	    incriterjob.setPreserveStatePath(preserveState);		// the preserve map/reduce output path
-	    incriterjob.setDynamicDataPath(output + "/" + iteration_id + "/start");				// the dynamic data path
+	    incriterjob.setDynamicDataPath(output + "/" + iteration_id);				// the dynamic data path
 	    incriterjob.setIncrOutputPath(output);
 	    
 	    incriterjob.setStaticInputFormat(SequenceFileInputFormat.class);
