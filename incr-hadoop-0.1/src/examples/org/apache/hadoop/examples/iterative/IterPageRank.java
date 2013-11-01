@@ -336,6 +336,8 @@ public class IterPageRank {
 	    
 	    if(max_iterations == Integer.MAX_VALUE){
 	    	job.setDistanceThreshold(1);
+	    }else{
+	    	job.setMaxIterations(max_iterations);
 	    }
 
 	    job.setOutputKeyClass(LongWritable.class);
