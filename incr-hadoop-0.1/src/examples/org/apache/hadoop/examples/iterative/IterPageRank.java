@@ -309,49 +309,49 @@ public class IterPageRank {
 	    long itertime = 0;
 	    
 	    //while(cont && iteration < max_iterations){
-	    	long iterstart = System.currentTimeMillis();
-	    	
-		    JobConf job = new JobConf(IterPageRank.class);
-		    String jobname = "PageRank Main ";
-		    job.setJobName(jobname);
-	    
-		    //if(partitions == 0) partitions = Util.getTTNum(job);
-		    
-		    //set for iterative process   
-		    job.setIterative(true);
-		    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-		    /*job.setIterationNum(iteration);					//iteration number
-		    		    job.setCheckPointInterval(interval);			//checkpoint interval
-		    if(iteration > 1){
-		    	job.setDynamicDataPath(output);				//init by file, if not set init by API
-		    }*/
-		    job.setStaticDataPath(output + "/substatic");
-		    job.setStaticInputFormat(SequenceFileInputFormat.class);
-		    job.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
-	    	job.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
-		    job.setOutputFormat(SequenceFileOutputFormat.class);
-		    
-		    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
-		    FileOutputFormat.setOutputPath(job, new Path(output + "/result"));
-		    
-		    if(max_iterations == Integer.MAX_VALUE){
-		    	job.setDistanceThreshold(1);
-		    }
+    	long iterstart = System.currentTimeMillis();
+    	
+	    JobConf job = new JobConf(IterPageRank.class);
+	    String jobname = "PageRank Main ";
+	    job.setJobName(jobname);
     
-		    job.setOutputKeyClass(LongWritable.class);
-		    job.setOutputValueClass(FloatWritable.class);
-		    
-		    job.setIterativeMapperClass(PageRankMap.class);	
-		    job.setIterativeReducerClass(PageRankReduce.class);
-		    job.setProjectorClass(PageRankProjector.class);
-		    
-		    job.setNumReduceTasks(partitions);			
+	    //if(partitions == 0) partitions = Util.getTTNum(job);
+	    
+	    //set for iterative process   
+	    job.setIterative(true);
+	    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
+	    /*job.setIterationNum(iteration);					//iteration number
+	    		    job.setCheckPointInterval(interval);			//checkpoint interval
+	    if(iteration > 1){
+	    	job.setDynamicDataPath(output);				//init by file, if not set init by API
+	    }*/
+	    job.setStaticDataPath(output + "/substatic");
+	    job.setStaticInputFormat(SequenceFileInputFormat.class);
+	    job.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
+    	job.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
+	    job.setOutputFormat(SequenceFileOutputFormat.class);
+	    
+	    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
+	    FileOutputFormat.setOutputPath(job, new Path(output + "/result"));
+	    
+	    if(max_iterations == Integer.MAX_VALUE){
+	    	job.setDistanceThreshold(1);
+	    }
 
-		    cont = JobClient.runIterativeJob(job);
+	    job.setOutputKeyClass(LongWritable.class);
+	    job.setOutputValueClass(FloatWritable.class);
+	    
+	    job.setIterativeMapperClass(PageRankMap.class);	
+	    job.setIterativeReducerClass(PageRankReduce.class);
+	    job.setProjectorClass(PageRankProjector.class);
+	    
+	    job.setNumReduceTasks(partitions);			
 
-	    	long iterend = System.currentTimeMillis();
-	    	itertime += (iterend - iterstart) / 1000;
-	    	Util.writeLog("iter.pagerank.log", "iteration computation takes " + itertime + " s");
+	    cont = JobClient.runIterativeJob(job);
+
+    	long iterend = System.currentTimeMillis();
+    	itertime += (iterend - iterstart) / 1000;
+    	Util.writeLog("iter.pagerank.log", "iteration computation takes " + itertime + " s");
 	    	
 	    	//iteration++;
 	    //}
