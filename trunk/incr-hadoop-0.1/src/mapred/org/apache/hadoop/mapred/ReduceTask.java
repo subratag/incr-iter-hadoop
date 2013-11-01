@@ -2167,9 +2167,11 @@ class ReduceTask extends Task {
     
     // Initialize the codec
     codec = initCodec();
-
     boolean isLocal = "local".equals(job.get("mapred.job.tracker", "local"));
 
+	hdfs = FileSystem.get(job);
+	localfs = FileSystem.getLocal(job);
+	
     //the common case, for the case that is not incremental iterative app
     if(!job.isIterative() && !job.isIncrementalIterative()){
     	long time1 = System.currentTimeMillis();
@@ -2188,9 +2190,6 @@ class ReduceTask extends Task {
 		
 		setPhase(TaskStatus.Phase.SORT);
 		statusUpdate(umbilical);
-		  
-		hdfs = FileSystem.get(job);
-		localfs = FileSystem.getLocal(job);
 		
 		final FileSystem rfs = FileSystem.getLocal(job).getRaw();
           
@@ -2290,9 +2289,6 @@ class ReduceTask extends Task {
 		        setPhase(TaskStatus.Phase.SORT);
 		        statusUpdate(umbilical);
 		          
-		        hdfs = FileSystem.get(job);
-		        localfs = FileSystem.getLocal(job);
-		
 		        final FileSystem rfs = FileSystem.getLocal(job).getRaw();
 		        
 	            RawKeyValueIterator rIter = isLocal
