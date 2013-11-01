@@ -2171,7 +2171,7 @@ class ReduceTask extends Task {
     boolean isLocal = "local".equals(job.get("mapred.job.tracker", "local"));
 
     //the common case, for the case that is not incremental iterative app
-    if(!job.isIncrementalIterative() && !job.isIterative()){
+    if(!job.isIterative() && !job.isIncrementalIterative()){
     	long time1 = System.currentTimeMillis();
         if (!isLocal) {
             reduceCopier = new ReduceCopier(umbilical, job, reporter);

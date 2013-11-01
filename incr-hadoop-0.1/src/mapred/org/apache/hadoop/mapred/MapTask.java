@@ -529,7 +529,9 @@ class MapTask extends Task {
       return;
     }
 
-
+	hdfs = FileSystem.get(job);
+	localfs = FileSystem.getLocal(job);
+	
     if (useNewApi) {
       runNewMapper(job, splitMetaInfo, umbilical, reporter);
     } else {
@@ -686,19 +688,20 @@ class MapTask extends Task {
                     ) throws IOException, InterruptedException,
                              ClassNotFoundException {
 	long taskstart = new Date().getTime();
-	
 	int iterationNum = job.getIterationNum();
 	  
-	FileSystem hdfs = FileSystem.get(job);
-	FileSystem localfs = FileSystem.getLocal(job);
-	
-	if(job.getStaticDataPath() == null) throw new IOException("we need input data which is usually the static data!!!");
-	
 	IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
 	Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
 	
+	if(job.getStaticDataPath() == null) throw new IOException("we need input data which is usually the static data!!!");
+	boolean init = (iterationNum == 1) && 
+			((projector.getProjectType() == Projector.Type.ONE2ONE && job.getDynamicDataPath() == null) ||
+			(projector.getProjectType() == Projector.Type.ONE2ALL && job.getGlobalUniqValuePath() == null) ||
+			(projector.getProjectType() == Projector.Type.ONE2MUL && job.getDynamicDataPath() == null));
+
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
-	RecordReader<DK, DV> dynamicReader = getDynamicReader(job, iteration-1, projector, reporter);
+	RecordReader<DK, DV> dynamicReader = null;
+	if(!init) dynamicReader = getDynamicReader(job, iteration-1, projector, reporter);
 
     SK statickeyObject = null;
     SV staticObject = null;
@@ -716,21 +719,24 @@ class MapTask extends Task {
     }
     
     try{
-		if(iterationNum == 1 && job.getDynamicDataPath() == null){
+		if(init){
 			//init dyanmic value based on user setting when running the first iterative job
-			
-			OldOutputCollector<K2, V2> output = new OldOutputCollector<K2, V2>(collector, conf);
+			if((projector.getProjectType() == Projector.Type.ONE2ONE && job.getDynamicDataPath() == null) ||
+					(projector.getProjectType() == Projector.Type.ONE2ALL && job.getGlobalUniqValuePath() == null) ||
+					(projector.getProjectType() == Projector.Type.ONE2MUL && job.getDynamicDataPath() == null)){
+				OldOutputCollector<K2, V2> output = new OldOutputCollector<K2, V2>(collector, conf);
 
-		      // allocate key & value instances that are re-used for all entries
-			statickeyObject = staticReader.createKey();
-			staticObject = staticReader.createValue();
+			      // allocate key & value instances that are re-used for all entries
+				statickeyObject = staticReader.createKey();
+				staticObject = staticReader.createValue();
 
-	        while (staticReader.next(statickeyObject, staticObject)) {
-				dynamicObject = projector.initDynamicV(projector.project(statickeyObject));
-				mapper.map(statickeyObject, staticObject, dynamicObject, output, reporter);
-	        }
-			
-			collector.flush();
+		        while (staticReader.next(statickeyObject, staticObject)) {
+					dynamicObject = projector.initDynamicV(projector.project(statickeyObject));
+					mapper.map(statickeyObject, staticObject, dynamicObject, output, reporter);
+		        }
+				
+				collector.flush();
+			}
 		}else{
 			OldOutputCollector<K2, V2> output = new OldOutputCollector<K2, V2>(collector, conf);
 
@@ -812,10 +818,7 @@ class MapTask extends Task {
 		long taskstart = new Date().getTime();
 		
 		int iterationNum = job.getIterationNum();
-		  
-		FileSystem hdfs = FileSystem.get(job);
-		FileSystem localfs = FileSystem.getLocal(job);
-
+		
 		if(job.getStaticDataPath() == null) throw new IOException("we need input data which is usually the static data!!!");
 		
 		RecordReader<SK, SV> staticReader = null;
@@ -1131,9 +1134,6 @@ class MapTask extends Task {
                              ClassNotFoundException {
 	long taskstart = new Date().getTime();
 
-	hdfs = FileSystem.get(job);
-	localfs = FileSystem.getLocal(job);
-
 	IFile.TrippleReader<SK, SV, Text> deltaStaticReader = getDeltaStaticReader(job);		//delta update static file reader
 	RecordReader<DK, DV> dynamicReader = getConvergeReader(job, reporter);					//converged result reader
 	//add index to dynamic reader
@@ -1264,9 +1264,6 @@ class MapTask extends Task {
                     ) throws IOException, InterruptedException,
                              ClassNotFoundException {
 	long taskstart = new Date().getTime();
-
-	hdfs = FileSystem.get(job);
-	localfs = FileSystem.getLocal(job);
 
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = getFilterDynamicReader(job, iteration-1, reporter);					//converged result reader
@@ -1543,7 +1540,7 @@ class MapTask extends Task {
 			Path localPath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + iteration + "." + this.getTaskID().getTaskID().getId());
 			
 			if(job.getDynamicDataPath() == null && job.getGlobalUniqValuePath() == null){
-				throw new IOException("we need the converged dynamic data to perform iterative computation!!!");
+				throw new IOException("we need the initial dynamic data to perform iterative computation!!!");
 			}else if(job.getDynamicDataPath() != null && job.getGlobalUniqValuePath() != null){
 				throw new IOException("you can not set both dynamic path and globaluniqvalue path!");
 			}
