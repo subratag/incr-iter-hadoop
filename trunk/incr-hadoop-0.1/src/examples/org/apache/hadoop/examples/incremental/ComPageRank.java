@@ -329,7 +329,7 @@ public class ComPageRank {
 		    //set for iterative process   
 		    job.setIterative(true);
 		    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-		    job.setIterationNum(iteration);					//iteration number
+		    //job.setIterationNum(iteration);					//iteration number
 		    job.setCheckPointInterval(interval);					//checkpoint interval
 		    if(iteration > 1){
 		    	job.setDynamicDataPath(output + "/iteration-" + (iteration-1));				//init by file, if not set init by API

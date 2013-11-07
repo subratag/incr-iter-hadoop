@@ -110,6 +110,30 @@ public class IterPageRank {
 		}
 	}
 	
+	public static class DistributeDataMap2 extends MapReduceBase implements
+		Mapper<LongWritable, Text, LongWritable, Text> {
+		
+		@Override
+		public void map(LongWritable arg0, Text value,
+				OutputCollector<LongWritable, Text> arg2, Reporter arg3)
+				throws IOException {
+			arg2.collect(arg0, value);
+		}
+	}
+
+	public static class DistributeDataReduce2 extends MapReduceBase implements
+		Reducer<LongWritable, Text, LongWritable, Text> {
+		Random rand = new Random();
+		@Override
+		public void reduce(LongWritable key, Iterator<Text> values,
+				OutputCollector<LongWritable, Text> output, Reporter reporter)
+				throws IOException {
+			while(values.hasNext()){
+				output.collect(key, values.next());
+			}
+		}
+	}
+	
 	public static class PageRankMap extends MapReduceBase implements
 		IterativeMapper<LongWritable, Text, LongWritable, FloatWritable, LongWritable, FloatWritable> {
 	
@@ -212,7 +236,8 @@ public class IterPageRank {
 		System.out.println(	"\t-p # of parittions\n" +
 							"\t-i snapshot interval\n" +
 							"\t-I # of iterations\n" +
-							"\t-n # of nodes");
+							"\t-n # of nodes +" +
+							"\t-D initial dynamic path");
 	}
 
 	public static int main(String[] args) throws Exception {
@@ -225,6 +250,8 @@ public class IterPageRank {
 		int partitions = 0;
 		int interval = 1;
 		int max_iterations = Integer.MAX_VALUE;
+		String init_dynamic = "";
+		String data_format = "";
 		
 		List<String> other_args = new ArrayList<String>();
 		for(int i=0; i < args.length; ++i) {
@@ -235,6 +262,10 @@ public class IterPageRank {
 		        	interval = Integer.parseInt(args[++i]);
 		          } else if ("-I".equals(args[i])) {
 		        	  max_iterations = Integer.parseInt(args[++i]);
+		          } else if ("-D".equals(args[i])) {
+		        	  init_dynamic = args[++i];
+		          } else if ("-f".equals(args[i])) {
+		        	  data_format = args[++i];
 		          } else {
 		    		  other_args.add(args[i]);
 		    	  }
@@ -272,13 +303,23 @@ public class IterPageRank {
 	    
 	    job1.setDataDistribution(true);
 	    job1.setIterativeAlgorithmID(iteration_id);
-	    job1.setInputFormat(KeyValueTextInputFormat.class);
+	    if(data_format.equals("KeyValueTextInputFormat")){
+	    	job1.setInputFormat(KeyValueTextInputFormat.class);
+	    	job1.setMapperClass(DistributeDataMap.class);
+	    	job1.setReducerClass(DistributeDataReduce.class);
+	    }else if(data_format.equals("SequenceFileInputFormat")){
+	    	job1.setInputFormat(SequenceFileInputFormat.class);
+	    	job1.setMapperClass(DistributeDataMap2.class);
+	    	job1.setReducerClass(DistributeDataReduce2.class);
+	    }else {
+	    	job1.setInputFormat(KeyValueTextInputFormat.class);
+	    	job1.setMapperClass(DistributeDataMap.class);
+	    	job1.setReducerClass(DistributeDataReduce.class);
+	    }
+	    
 	    job1.setOutputFormat(SequenceFileOutputFormat.class);
-	    TextInputFormat.addInputPath(job1, new Path(inStatic));
+	    FileInputFormat.addInputPath(job1, new Path(inStatic));
 	    FileOutputFormat.setOutputPath(job1, new Path(output + "/substatic"));
-
-	    job1.setMapperClass(DistributeDataMap.class);
-		job1.setReducerClass(DistributeDataReduce.class);
 
 	    job1.setOutputKeyClass(LongWritable.class);
 	    job1.setOutputValueClass(Text.class);
@@ -325,7 +366,15 @@ public class IterPageRank {
 	    if(iteration > 1){
 	    	job.setDynamicDataPath(output);				//init by file, if not set init by API
 	    }*/
+	    if(init_dynamic == ""){
+	    	job.setInitStatePathOrApp(false);
+	    }else{
+	    	job.setInitStatePathOrApp(true);
+	    	job.setInitStatePath(init_dynamic);
+	    }
+	    
 	    job.setStaticDataPath(output + "/substatic");
+	    job.setDynamicDataPath(output + "/result");	
 	    job.setStaticInputFormat(SequenceFileInputFormat.class);
 	    job.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
     	job.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
@@ -374,7 +423,7 @@ public class IterPageRank {
 	    //job2.setIterationNum(iteration);					//iteration numbe
 	    job2.setCheckPointInterval(interval);					//checkpoint interval
 	    job2.setStaticDataPath(output + "/substatic");
-	    job2.setDynamicDataPath(output + "/result");	
+	    job2.setDynamicDataPath(output + "/result/iteration-" + max_iterations);	
 	    job2.setStaticInputFormat(SequenceFileInputFormat.class);
 	    job2.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
     	job2.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this

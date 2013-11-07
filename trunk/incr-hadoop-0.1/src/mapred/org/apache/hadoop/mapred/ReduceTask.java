@@ -193,12 +193,12 @@ class ReduceTask extends Task {
 							}
 							
 							if(iteration > completedIterationIndex){
-								LOG.info("!!!incremental task " + iteration + ":" + mapTaskId + " is completed! completed: " + 
-										completeIterationTasks.get(iteration).size() + " total: " + numMaps);
-								
 								if(!completeIterationTasks.get(iteration).contains(mapTaskId)){
 									completeIterationTasks.get(iteration).add(mapTaskId);
 								}
+								
+								LOG.info("!!!iterative task " + iteration + ":" + mapTaskId + " is completed! completed: " + 
+										completeIterationTasks.get(iteration).size() + " total: " + numMaps);
 								
 								synchronized(reducetask){
 									if(iteration > completedIterationIndex && completeIterationTasks.get(iteration).size() >= numMaps){
@@ -2291,14 +2291,26 @@ class ReduceTask extends Task {
 		          
 		        final FileSystem rfs = FileSystem.getLocal(job).getRaw();
 		        
-	            RawKeyValueIterator rIter = isLocal
-	              ? Merger.merge(job, rfs, job.getMapOutputKeyClass(),
-	                  job.getMapOutputValueClass(), codec, getMapFiles(rfs, true),
-	                  !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
-	                  new Path(getTaskID().toString()), job.getOutputKeyComparator(),
-	                  reporter, spilledRecordsCounter, null)
-	              : reduceCopier.createKVSIterator(job, rfs, reporter);
-
+	            RawKeyValueIterator rIter = null;
+	            
+	            if(job.isIterative()){
+	            	rIter = isLocal ? Merger.merge(job, rfs, job.getMapOutputKeyClass(),
+	      	                  job.getMapOutputValueClass(), codec, getMapFiles(rfs, true),
+	      	                  !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
+	      	                  new Path(getTaskID().toString()), job.getOutputKeyComparator(),
+	      	                  reporter, spilledRecordsCounter, null)
+	      	              : reduceCopier.createKVIterator(job, rfs, reporter);
+	            }else if(job.isIncrementalIterative()){
+	            	rIter = isLocal ? Merger.merge(job, rfs, job.getMapOutputKeyClass(),
+	      	                  job.getMapOutputValueClass(), codec, getMapFiles(rfs, true),
+	      	                  !conf.getKeepFailedTaskFiles(), job.getInt("io.sort.factor", 100),
+	      	                  new Path(getTaskID().toString()), job.getOutputKeyComparator(),
+	      	                  reporter, spilledRecordsCounter, null)
+	      	              : reduceCopier.createKVSIterator(job, rfs, reporter);
+	            }else{
+	            	throw new IOException("not iterative !!!");
+	            }
+	            
 	            // free up the data structures
 	            mapOutputFilesOnDisk.clear();
 	            
@@ -2321,7 +2333,7 @@ class ReduceTask extends Task {
 	        	}
 	        	*/
 	        	if (job.isIterative()){
-	            	runIterativeReducer(job, umbilical, reporter, rIter, comparator, 
+	            	runIterativeReducer(job, umbilical, reporter, iteration, rIter, comparator, 
 	                        keyClass, valueClass);
 	            }else if(job.isIncrementalIterative()){
 		        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, comparator, 
@@ -2747,7 +2759,7 @@ class ReduceTask extends Task {
 	  private RecordReader<OUTKEY,OUTVALUE> getLastResultRecordReader(int currentIteration, Reporter reporter) throws IOException{
 		  FileSystem lfs = FileSystem.getLocal(conf);
 		  Path lastresult = new Path("/tmp/iteroop/" + conf.getIterativeAlgorithmID() + 
-				  "/substate-" + (conf.getIterationNum()-1) + "." + getTaskID().getTaskID().getId());
+				  "/substate-" + (currentIteration-1) + "." + getTaskID().getTaskID().getId());
 		  long filelen = lfs.getFileStatus(lastresult).getLen();
 		  InputSplit inputSplit = new FileSplit(lastresult, 0, filelen, null, true);
 		  return conf.getResultInputFormat().getRecordReader(inputSplit, conf, reporter);
@@ -3042,6 +3054,7 @@ class ReduceTask extends Task {
   void runIterativeReducer(JobConf job,
                      TaskUmbilicalProtocol umbilical,
                      final TaskReporter reporter,
+                     int iteration,
                      RawKeyValueIterator rIter,
                      RawComparator<INKEY> comparator,
                      Class<INKEY> keyClass,
@@ -3053,13 +3066,13 @@ class ReduceTask extends Task {
       ReflectionUtils.newInstance(job.getIterativeReducerClass(), job);
 
     boolean writeHDFS = false;
-    if(job.getIterationNum() % job.getCheckPointInterval() == 0 || job.getCheckPointInterval() == -1){
+    if(iteration % job.getCheckPointInterval() == 0 || job.getCheckPointInterval() == -1){
     	writeHDFS = true;
     }
     if(job.getOutputKeyClass().equals(GlobalUniqKeyWritable.class)) writeHDFS = false;
     
 	//result is dump to local fs, reduce output is localkvstate, create local state data files on local fs
-	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + job.getIterationNum() + "." + this.getTaskID().getTaskID().getId());
+	String localfilename = new String("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + iteration + "." + this.getTaskID().getTaskID().getId());
 	LOG.info("the local output file is " + localfilename);
     final RecordWriter<OUTKEY, OUTVALUE> localOut = new OldTrackingRecordWriter<OUTKEY, OUTVALUE>(
             reduceOutputCounter, job, reporter, localfilename, false);
@@ -3067,9 +3080,9 @@ class ReduceTask extends Task {
     //whether to perform termination check based on distance
     float threshold = job.getDistanceThreshold();
     TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE> termchecker = null;
-    boolean termcheck = ((threshold == -1) ? false : true) && (job.getIterationNum() > 1);	//perform term check from the second iteration
+    boolean termcheck = ((threshold == -1) ? false : true) && (iteration > 1);	//perform term check from the second iteration
     if(termcheck){
-    	termchecker = new TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE>(conf.getIterationNum(), reporter);
+    	termchecker = new TerminateChecker<INKEY,INVALUE,OUTKEY,OUTVALUE>(iteration, reporter);
     }
 
     OutputCollector<OUTKEY,OUTVALUE> collector;
@@ -3114,13 +3127,13 @@ class ReduceTask extends Task {
       if(writeHDFS){
     	  FileSystem hdfs = FileSystem.get(job);
     	  hdfs.copyFromLocalFile(false, new Path(localfilename), 
-    			  new Path(job.get("mapred.output.dir") + "/" + getOutputName(getPartition())));
+    			  new Path(job.get("mapred.output.dir") + "/iteration-" + iteration + "/" + getOutputName(getPartition())));
       }
 
       //if global data, need to send to jobtracker, then the jobtracker will combine them
       if(job.getGlobalUniqValuePath() != null) {
     	  LOG.info("send global data to jobtracker!");
-    	  sendGlobalData(job, localfilename, reporter);
+    	  sendGlobalData(job, localfilename, iteration, reporter);
       }
       
       //End of clean up.
@@ -3140,7 +3153,7 @@ class ReduceTask extends Task {
     long taskend = new Date().getTime();
     
     //report iterative task information
-    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
+    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), iteration, 
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reduceInputKeyCounter.getCounter());
     event.setRunTime(taskend - taskstart);
@@ -3281,7 +3294,7 @@ class ReduceTask extends Task {
     long taskend = new Date().getTime();
     
     //report iterative task information
-    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
+    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), 1, 
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reduceInputKeyCounter.getCounter());
     event.setRunTime(taskend - taskstart);
@@ -3338,7 +3351,7 @@ class ReduceTask extends Task {
 	  resultReader.close();
   }*/
   
-  private void sendGlobalData(JobConf job, String localResult, TaskReporter reporter) throws IOException{
+  private void sendGlobalData(JobConf job, String localResult, int iteration, TaskReporter reporter) throws IOException{
 	  FileSystem localfs = FileSystem.getLocal(job);
 	  Path localresultpath = new Path(localResult);
 	  long filelen = localfs.getFileStatus(localresultpath).getLen();
@@ -3355,7 +3368,7 @@ class ReduceTask extends Task {
 	  
 	  LOG.info("global value is " + value);
 	  
-	  GlobalData globaldata = new GlobalData(value, getJobID(), job.getIterationNum());
+	  GlobalData globaldata = new GlobalData(value, getJobID(), iteration);
 	  //globaldata.set(value);
 	  //globaldata.setConf(job);
 	  //LOG.info("global value is " + globaldata.get());
@@ -3535,7 +3548,7 @@ class ReduceTask extends Task {
     long taskend = new Date().getTime();
     
     //report iterative task information
-    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
+    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), 1, 
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reduceInputKeyCounter.getCounter());
     event.setRunTime(taskend - taskstart);
@@ -5881,7 +5894,7 @@ class ReduceTask extends Task {
      */
     @SuppressWarnings("unchecked")
     private RawKeyValueSourceIterator createPreserveKVSIterator2(
-        JobConf job, Reporter reporter) throws IOException {
+        JobConf job, int iteration, Reporter reporter) throws IOException {
 
     	FileSystem fs = FileSystem.getLocal(job);
     	
@@ -5939,26 +5952,25 @@ class ReduceTask extends Task {
   					" have set! Please check the path and check the map task number " + remotePreservedStatePath);
       	  }
     	  
-          for(int i=0; i<job.getIterationNum(); i++){
-        	//copy the remote reduce preserve file, which are stored in IncrementalSourceValuesIteration.close()
-	      	  taskid = reduceTask.getTaskID().getTaskID().getId();
-	      	  remotePreservedStatePath = new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + i + "-" + taskid);
-	      	  localPreservedStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + i + "-" + taskid);
-	  			
-	      	  //if(hdfs.exists(remotePreservedStatePath)){
-	      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
-	      		  if(!localfs.exists(localPreservedStatePath)){
-	      			  hdfs.copyToLocalFile(remotePreservedStatePath, localPreservedStatePath);
-	      			  LOG.info("copy remote preserve file " + remotePreservedStatePath + " to local disk" + localPreservedStatePath + "!!!!!!!!!");
-	      		  }
-	  				
-	      		  preserveSegments.add(new KVSSegment<K,V,SK>(job, fs, localPreservedStatePath, null, true, i));
-	      		  
-	      	  //}else{
-	      		  //throw new IOException("acturally, there is no preserve data on the path you" +
-	  					//" have set! Please check the path and check the map task number " + remotePreservedStatePath);
-	      	  //}
-          }
+          
+    	//copy the remote reduce preserve file, which are stored in IncrementalSourceValuesIteration.close()
+      	  taskid = reduceTask.getTaskID().getTaskID().getId();
+      	  remotePreservedStatePath = new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + (iteration-1) + "-" + taskid);
+      	  localPreservedStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/reducePreserve-Incr-" + (iteration-1) + "-" + taskid);
+  			
+      	  //if(hdfs.exists(remotePreservedStatePath)){
+      		  //if it doesn't exist the local static file, it means it is the first iteration, so copy it from hdfs
+  		  if(!localfs.exists(localPreservedStatePath)){
+  			  hdfs.copyToLocalFile(remotePreservedStatePath, localPreservedStatePath);
+  			  LOG.info("copy remote preserve file " + remotePreservedStatePath + " to local disk" + localPreservedStatePath + "!!!!!!!!!");
+  		  }
+  				
+      	  preserveSegments.add(new KVSSegment<K,V,SK>(job, fs, localPreservedStatePath, null, true, 0));
+      		  
+      	  //}else{
+      		  //throw new IOException("acturally, there is no preserve data on the path you" +
+  					//" have set! Please check the path and check the map task number " + remotePreservedStatePath);
+      	  //}
       }
      
       LOG.info("Merging " + preserveSegments.size() + " preseved files, ");

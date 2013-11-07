@@ -615,7 +615,7 @@ public class IterKmeans_Lastfm {
 		    //set for iterative process   
 		    job.setIterative(true);
 		    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-		    job.setIterationNum(iteration);					//iteration number
+		    //job.setIterationNum(iteration);					//iteration number
 		    job.setCheckPointInterval(interval);					//checkpoint interval
 		    //job.setDynamicDataPath(instate);				//init by file, if not set init by API
 		    job.setStaticDataPath(output + "/substatic");

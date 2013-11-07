@@ -1688,8 +1688,8 @@ public class JobInProgress {
   }
   
   public synchronized boolean scheduleReduces() {
-	  //added by yanfeng, ignore this limitation
-	  if(this.conf.isIncrementalIterative()){
+	  //added by yanfeng, ignore this limitation, reduces should start when job start
+	  if(this.conf.isIncrementalIterative() || this.conf.isIterative()){
 		  return true;
 	  }
 	  return finishedMapTasks >= completedMapsForReduceSlowstart;
