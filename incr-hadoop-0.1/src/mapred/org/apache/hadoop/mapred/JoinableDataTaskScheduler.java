@@ -248,14 +248,19 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
 	    final int availableReduceSlots = 
 	      Math.min((trackerCurrentReduceCapacity - trackerRunningReduces), 1);
 	    boolean exceededReducePadding = false;
-	    //LOG.info("availableReduceSlots " + availableReduceSlots);
+	    
+	    LOG.info("availableReduceSlots " + availableReduceSlots + 
+	    		"\ttrackerCurrentReduceCapacity=" + trackerCurrentReduceCapacity +
+	    		"\ttrackerRunningReduces=" + trackerRunningReduces +
+	    		"\treduceLoadFactor=" + reduceLoadFactor + 
+	    		"\ttrackerReduceCapacity=" + trackerReduceCapacity);
 	    if (availableReduceSlots > 0) {
 	    	
 	      exceededReducePadding = exceededPadding(false, clusterStatus, 
 	                                              trackerReduceCapacity);
 	      synchronized (jobQueue) {
 	        for (JobInProgress job : jobQueue) {
-	        	LOG.info("job " + job.getJobID());
+	        	LOG.info("job " + job.getJobID() + " assigning reduce tasks!");
 	          if (job.getStatus().getRunState() != JobStatus.RUNNING ||
 	              job.numReduceTasks == 0) {
 	        	  LOG.info("have to continue " + job.getStatus().getRunState());
@@ -655,7 +660,6 @@ public class JoinableDataTaskScheduler extends TaskScheduler {
     	  
     	  if(jointype.equals("one2one")){
     		  //one-to-one or one-to-mul jobs
-    		  
 	          if(this.first_job_map.get(iterativeAppID).equals(job.getJobID()) 
 	        		  && job.getJobConf().isIterative()){
 	        	  LOG.info(job.getJobID() + " is the first iteration job for reduce");

@@ -489,15 +489,7 @@ public class JobConf extends Configuration {
 	public String getIterativeAlgorithmID() {
 		return get("mapred.iterative.algorithmid", "none");
 	}
-	
-	public void setIterationNum(int iteration) {
-		setInt("mapred.iterative.iteration.num", iteration);
-	}
 
-	public int getIterationNum() {
-		return getInt("mapred.iterative.iteration.num", -1);
-	}
-	
 	// Yanfeng: set the number of iteration rounds
 	public void setMaxIterations(int num) {
 		set("mapred.iterative.terminate.iteartions", Integer.toString(num));
@@ -727,6 +719,24 @@ public class JobConf extends Configuration {
 	
 	public String getStaticDataPath() {
 		return get("mapred.iterative.static.path");
+	}
+	
+	//set init method
+	public void setInitStatePathOrApp(boolean stateOrApp) {
+		setBoolean("mapred.iterative.init.stateorpath", stateOrApp);
+	}
+	
+	public boolean getInitStatePathOrApp() {
+		return getBoolean("mapred.iterative.init.stateorpath", true);
+	}
+	
+	//set init path
+	public void setInitStatePath(String statePath) {
+		set("mapred.iterative.init.statepath", statePath);
+	}
+	
+	public String getInitStatePath() {
+		return get("mapred.iterative.init.statepath");
 	}
 	
 	//set static data hdfs path

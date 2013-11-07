@@ -688,20 +688,16 @@ class MapTask extends Task {
                     ) throws IOException, InterruptedException,
                              ClassNotFoundException {
 	long taskstart = new Date().getTime();
-	int iterationNum = job.getIterationNum();
 	  
 	IterativeMapper<SK, SV, DK, DV, K2, V2> mapper = (IterativeMapper<SK, SV, DK, DV, K2, V2>) ReflectionUtils.newInstance(job.getIterativeMapperClass(), job);
 	Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
 	
 	if(job.getStaticDataPath() == null) throw new IOException("we need input data which is usually the static data!!!");
-	boolean init = (iterationNum == 1) && 
-			((projector.getProjectType() == Projector.Type.ONE2ONE && job.getDynamicDataPath() == null) ||
-			(projector.getProjectType() == Projector.Type.ONE2ALL && job.getGlobalUniqValuePath() == null) ||
-			(projector.getProjectType() == Projector.Type.ONE2MUL && job.getDynamicDataPath() == null));
+	boolean initViaAPI = (iteration == 1) && (!job.getInitStatePathOrApp());
 
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = null;
-	if(!init) dynamicReader = getDynamicReader(job, iteration-1, projector, reporter);
+	if(!initViaAPI) dynamicReader = getDynamicReader(job, iteration-1, projector, reporter);
 
     SK statickeyObject = null;
     SV staticObject = null;
@@ -719,24 +715,20 @@ class MapTask extends Task {
     }
     
     try{
-		if(init){
+		if(initViaAPI){
 			//init dyanmic value based on user setting when running the first iterative job
-			if((projector.getProjectType() == Projector.Type.ONE2ONE && job.getDynamicDataPath() == null) ||
-					(projector.getProjectType() == Projector.Type.ONE2ALL && job.getGlobalUniqValuePath() == null) ||
-					(projector.getProjectType() == Projector.Type.ONE2MUL && job.getDynamicDataPath() == null)){
-				OldOutputCollector<K2, V2> output = new OldOutputCollector<K2, V2>(collector, conf);
+			OldOutputCollector<K2, V2> output = new OldOutputCollector<K2, V2>(collector, conf);
 
-			      // allocate key & value instances that are re-used for all entries
-				statickeyObject = staticReader.createKey();
-				staticObject = staticReader.createValue();
+		    // allocate key & value instances that are re-used for all entries
+			statickeyObject = staticReader.createKey();
+			staticObject = staticReader.createValue();
 
-		        while (staticReader.next(statickeyObject, staticObject)) {
-					dynamicObject = projector.initDynamicV(projector.project(statickeyObject));
-					mapper.map(statickeyObject, staticObject, dynamicObject, output, reporter);
-		        }
-				
-				collector.flush();
-			}
+	        while (staticReader.next(statickeyObject, staticObject)) {
+				dynamicObject = projector.initDynamicV(projector.project(statickeyObject));
+				mapper.map(statickeyObject, staticObject, dynamicObject, output, reporter);
+	        }
+			
+			collector.flush();
 		}else{
 			OldOutputCollector<K2, V2> output = new OldOutputCollector<K2, V2>(collector, conf);
 
@@ -793,7 +785,7 @@ class MapTask extends Task {
     long taskend = new Date().getTime();
     
     //report iterative task information
-    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
+    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), iteration, 
     		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
     event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
     event.setRunTime(taskend - taskstart);
@@ -816,8 +808,6 @@ class MapTask extends Task {
                     ) throws IOException, InterruptedException,
                              ClassNotFoundException {
 		long taskstart = new Date().getTime();
-		
-		int iterationNum = job.getIterationNum();
 		
 		if(job.getStaticDataPath() == null) throw new IOException("we need input data which is usually the static data!!!");
 		
@@ -852,14 +842,14 @@ class MapTask extends Task {
 	
 		if(projector.getProjectType() == Projector.Type.ONE2ALL){
 			//global dynamic data, get data from hdfs
-			Path globaldatapath = new Path(job.getGlobalUniqValuePath() + "/iteration-" + (job.getIterationNum()-1));
+			Path globaldatapath = new Path(job.getGlobalUniqValuePath() + "/iteration-last");
 			
 			long globaldatalen = hdfs.getFileStatus(globaldatapath).getLen();
 			
 			InputSplit inputSplit = new FileSplit(globaldatapath, 0, globaldatalen, job);
 			dynamicReader = new IterationTrackedRecordReader<DK, DV>(inputSplit, job, reporter, job.getDynamicInputFormat());
 		}else{
-			Path localStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-" + (job.getIterationNum()-1) + "." + this.getTaskID().getTaskID().getId());
+			Path localStatePath = new Path("/tmp/iteroop/" + job.getIterativeAlgorithmID() + "/substate-for-preserve." + this.getTaskID().getTaskID().getId());
 			
 			//this may happen when speculative execution enabled
 			if(!localfs.exists(localStatePath)){
@@ -955,7 +945,7 @@ class MapTask extends Task {
 	    long taskend = new Date().getTime();
 	    
 	    //report iterative task information
-	    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), job.getIterationNum(), 
+	    IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), 1, 
 	    		this.getTaskID(), this.getTaskID().getTaskID().getId(), this.isMapTask());
 	    event.setProcessedRecords(reporter.getCounter(MAP_INPUT_RECORDS).getCounter());
 	    event.setRunTime(taskend - taskstart);
@@ -1549,12 +1539,22 @@ class MapTask extends Task {
 				throw new IOException("one2all type, you should setGlobalUniqValuePath()! ");
 			}
 			
-			if(job.getDynamicDataPath() != null){
-				remotePath = new Path(job.getDynamicDataPath() + "/iteartion-" + iteration + "/" + getOutputName(getTaskID().getTaskID().getId()));
-			}else if(job.getGlobalUniqValuePath() != null){
-				remotePath = new Path(job.getGlobalUniqValuePath() + "/iteartion-" + iteration);
+			if(iteration == 0){
+				//for the first iteration, initialization of the state data
+				if(job.getInitStatePath() != null){
+					remotePath = new Path(job.getInitStatePath() + "/" + getOutputName(getTaskID().getTaskID().getId()));
+				}else{
+					throw new IOException("no initial data path!");
+				}
+			}else{
+				//for the following iterations
+				if(job.getDynamicDataPath() != null){
+					remotePath = new Path(job.getDynamicDataPath() + "/iteartion-" + iteration + "/" + getOutputName(getTaskID().getTaskID().getId()));
+				}else if(job.getGlobalUniqValuePath() != null){
+					remotePath = new Path(job.getGlobalUniqValuePath() + "/iteartion-" + iteration);
+				}
 			}
-
+			
 			//not having remote path may happen, when the checkpoint set not to 1
 			if(!hdfs.exists(remotePath) && !localfs.exists(localPath)){
 				throw new IOException("no remote and no local state file");

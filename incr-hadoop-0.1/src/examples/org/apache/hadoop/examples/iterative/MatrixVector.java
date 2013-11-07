@@ -458,7 +458,7 @@ public class MatrixVector {
 
 			job2.setIterative(true);
 			job2.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-			job2.setIterationNum(iteration);					//iteration number
+			//job2.setIterationNum(iteration);					//iteration number
 			job2.setCheckPointInterval(interval);					//checkpoint interval
 			job2.setStaticDataPath(output + "/substatic");
 			job2.setStaticInputFormat(SequenceFileInputFormat.class);
