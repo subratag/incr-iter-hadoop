@@ -2342,7 +2342,8 @@ class ReduceTask extends Task {
 	            	
 	        	long time4 = System.currentTimeMillis();
 	        	
-	            LOG.info("job " + iteration + " map task " + this.getTaskID().getTaskID().getId() + " takes copy phase " + (time2-time1) + " ms sort phase " + (time3-time2) + " ms reduce phase " + (time4-time3) + " ms");
+	            LOG.info("iteration " + iteration + " reduce task " + this.getTaskID().getTaskID().getId() + " takes " + (time4 - time1) +
+	            		" ms copy phase " + (time2-time1) + " ms sort phase " + (time3-time2) + " ms reduce phase " + (time4-time3) + " ms");
 	            
 	            if(iteration+1 > maxiteration) break;
 	            
@@ -3151,6 +3152,8 @@ class ReduceTask extends Task {
     }
 
     long taskend = new Date().getTime();
+    
+    LOG.info("iteration " + iteration + " takes " + (taskend-taskstart));
     
     //report iterative task information
     IterativeTaskCompletionEvent event = new IterativeTaskCompletionEvent(job.getIterativeAlgorithmID(), getJobID(), iteration, 

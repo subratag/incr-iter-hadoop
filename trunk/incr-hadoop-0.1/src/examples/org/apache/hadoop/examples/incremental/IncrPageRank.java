@@ -67,12 +67,10 @@ public class IncrPageRank {
 		IterativeReducer<LongWritable, FloatWritable, LongWritable, FloatWritable> {
 	
 		private long starttime;
-		private int iteration;
 		
 		@Override
 		public void configure(JobConf job){
 			starttime = job.getLong("starttime", 0);
-			iteration = 0;
 			//System.out.println("start new");
 		}
 		
@@ -113,8 +111,7 @@ public class IncrPageRank {
 
 		@Override
 		public void close(){
-			iteration++;
-			System.out.println("iteration " + iteration + " now " + System.currentTimeMillis() + " past " + (System.currentTimeMillis()-starttime));
+			System.out.println("iteration now " + System.currentTimeMillis() + " past " + (System.currentTimeMillis()-starttime));
 		}
 	}
 
@@ -187,6 +184,7 @@ public class IncrPageRank {
 	    incrstartjob.setDeltaUpdatePath(deltaStatic);				//the out dated static data
 	    incrstartjob.setPreserveStatePath(preserveState);		// the preserve map/reduce output path
 	    incrstartjob.setConvergeStatePath(convValue);				// the stable dynamic data path
+	    //incrstartjob.setDynamicDataPath(convValue);				// the stable dynamic data path
 	    incrstartjob.setIncrOutputPath(output);
 	    
 	    incrstartjob.setStaticInputFormat(SequenceFileInputFormat.class);
