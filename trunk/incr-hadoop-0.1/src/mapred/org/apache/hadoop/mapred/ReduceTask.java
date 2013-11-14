@@ -3712,9 +3712,8 @@ class ReduceTask extends Task {
       values.close();		//close the k,sk,v writer
       reducer.close();
       
-      boolean writeHDFS = false;
+      boolean writeHDFS = (job.getMaxIterations() == iteration);
       if(writeHDFS){
-    	  FileSystem hdfs = FileSystem.get(job);
     	  hdfs.copyFromLocalFile(false, preservedPath, remotePreservedPath);
     	  hdfs.copyFromLocalFile(false, newPreserveIndexPath, remotePreservedIndexPath);
       }
@@ -4565,6 +4564,7 @@ class ReduceTask extends Task {
             } finally {
               shuffleClientMetrics.threadFree();
               finish(size, error);
+              scheduledCopies.clear();
             }
           } catch (InterruptedException e) { 
             break; // ALL DONE
@@ -5334,7 +5334,7 @@ class ReduceTask extends Task {
               // hence we continue with the hope that we might find some 
               // locations from the rebuild map and add then for fetching.
               if (knownOutputsByLoc == null || knownOutputsByLoc.size() == 0) {
-                continue;
+            	  continue;
               }
               
               //Identify duplicate hosts here

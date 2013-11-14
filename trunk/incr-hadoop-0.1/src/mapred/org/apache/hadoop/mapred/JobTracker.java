@@ -215,11 +215,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   
   //iterative processing related variables
   public static class IterativeAppInfo{
-	  Map<JobID, IterationJobInfo> iterativeJobInfo = new HashMap<JobID, IterationJobInfo>();
+	  Map<Integer, IterationInfo> iterativeJobInfo = new HashMap<Integer, IterationInfo>();
 	  boolean shouldterminate = false;
   }
   
-  public static class IterationJobInfo{
+  public static class IterationInfo{
 	  Map<Integer, PartInfo> partinfo = new HashMap<Integer, PartInfo>();
 	  int finishedMaps = 0;
 	  int finishedReduces = 0;
@@ -5435,7 +5435,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 
 		String iterativeAppID = event.getIterativeAppID();
 		JobID jobid = event.getJob();
-		int iterationNUM = event.getIteration();
+		int iteration = event.getIteration();
 		int partitionID = event.gettaskID();
 		boolean isMap = event.getIsMap();
 		long processedRecords = event.getProcessedRecords();
@@ -5455,11 +5455,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			iterationInfoMap.put(iterativeAppID, new IterativeAppInfo());
 		}
 		
-		if(iterationInfoMap.get(iterativeAppID).iterativeJobInfo.get(jobid) == null){
-			iterationInfoMap.get(iterativeAppID).iterativeJobInfo.put(jobid, new IterationJobInfo());
+		if(iterationInfoMap.get(iterativeAppID).iterativeJobInfo.get(iteration) == null){
+			iterationInfoMap.get(iterativeAppID).iterativeJobInfo.put(iteration, new IterationInfo());
 		}
 		
-		IterationJobInfo jobinfo = iterationInfoMap.get(iterativeAppID).iterativeJobInfo.get(jobid);
+		IterationInfo jobinfo = iterationInfoMap.get(iterativeAppID).iterativeJobInfo.get(iteration);
 		if(jobinfo.partinfo.get(partitionID) == null){
 			LOG.info("add some partition info");
 			
