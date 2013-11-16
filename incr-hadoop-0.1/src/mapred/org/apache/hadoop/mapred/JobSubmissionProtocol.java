@@ -298,5 +298,5 @@ interface JobSubmissionProtocol extends VersionedProtocol {
   /**
    * 
    */
-  public boolean shouldTerminated(String iterativeAppID) throws IOException;
+  public boolean shouldTerminated(JobID jobid) throws IOException;
 }

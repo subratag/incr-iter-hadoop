@@ -173,6 +173,8 @@ public interface TaskUmbilicalProtocol extends VersionedProtocol {
 
   ReduceTaskCompletionEventsUpdate getLocalReduceCompletionEvents(JobID jobId, int iteration) 
 											throws IOException;
+  MapReduceOutputReadyEvent getMapReduceOutputReadyEvent(JobID jobid, int iteration) throws IOException;
+  
   /**
    * The job initializer needs to report the sizes of the archive
    * objects and directories in the private distributed cache.

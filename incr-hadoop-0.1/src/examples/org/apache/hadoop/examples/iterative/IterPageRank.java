@@ -367,9 +367,9 @@ public class IterPageRank {
 	    	job.setDynamicDataPath(output);				//init by file, if not set init by API
 	    }*/
 	    if(init_dynamic == ""){
-	    	job.setInitStatePathOrApp(false);
+	    	job.setInitWithFileOrApp(false);
 	    }else{
-	    	job.setInitStatePathOrApp(true);
+	    	job.setInitWithFileOrApp(true);
 	    	job.setInitStatePath(init_dynamic);
 	    }
 	    

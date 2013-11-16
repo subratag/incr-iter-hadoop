@@ -3590,11 +3590,11 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 	  if(iteration == 0) iteration = 1;
 	  
 	  synchronized (runningJobs) {
-		  LOG.info("i am here! in running jobs");
+		  //LOG.info("i am here! in running jobs");
 		  rjob = runningJobs.get(jobId);          
 		  if (rjob != null) {
 			  synchronized (rjob) {
-				  LOG.info("i am here! in " + rjob);
+				  //LOG.info("i am here! in " + rjob);
 				  if(!completeReduceTasks.containsKey(jobId)){
 					  //return new ReduceTaskCompletionEventsUpdate(new ArrayList<Integer>());
 					  return null;
@@ -4486,6 +4486,13 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
 	public void transmitGlobalData(GlobalData globaldata) throws IOException {
 		LOG.info("get global data " + globaldata);
 		this.jobClient.reportGlobalData(globaldata);
+	}
+
+	@Override
+	public MapReduceOutputReadyEvent getMapReduceOutputReadyEvent(JobID jobid, int iteration)
+			throws IOException {
+		LOG.info("job " + jobid + " iteration " + iteration + " get map ready event! ");
+		return jobClient.queryOutputReadyEvent(jobid, iteration);
 	}
 
 }

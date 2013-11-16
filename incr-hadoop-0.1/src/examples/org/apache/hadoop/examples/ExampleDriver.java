@@ -23,6 +23,7 @@ import org.apache.hadoop.examples.dancing.Sudoku;
 import org.apache.hadoop.examples.incremental.ComPageRank;
 import org.apache.hadoop.examples.incremental.CompSeqFile;
 import org.apache.hadoop.examples.incremental.IncrPageRank;
+import org.apache.hadoop.examples.incremental.UpdateKmeansData;
 import org.apache.hadoop.examples.incremental.UpdatePageRankGraph;
 import org.apache.hadoop.examples.iterative.IterKmeans;
 import org.apache.hadoop.examples.iterative.IterKmeans_Lastfm;
@@ -99,6 +100,7 @@ public class ExampleDriver {
 
       //update graph
       pgd.addClass("genprupdate", UpdatePageRankGraph.class, "generate pagerank graph update");
+      pgd.addClass("genkmupdate", UpdateKmeansData.class, "generate kmeans data update");
       
       //incremental processing
       pgd.addClass("incrpagerank", IncrPageRank.class, "incremental pagerank");

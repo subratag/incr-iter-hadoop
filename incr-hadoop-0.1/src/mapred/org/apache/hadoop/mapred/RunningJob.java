@@ -118,7 +118,7 @@ public interface RunningJob {
    * @return <code>true</code> if the job is complete, else <code>false</code>.
    * @throws IOException
    */
-  public boolean isTerminated(String iterativeAppID) throws IOException;
+  public boolean isTerminated(JobID jobid) throws IOException;
   
   /**
    * Check if the job completed successfully. 

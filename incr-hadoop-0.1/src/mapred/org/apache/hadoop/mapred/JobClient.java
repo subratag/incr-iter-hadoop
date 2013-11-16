@@ -434,8 +434,8 @@ public class JobClient extends Configured implements MRConstants, Tool  {
     }
 
 	@Override
-	public boolean isTerminated(String iterativeAppID) throws IOException {
-		return jobSubmitClient.shouldTerminated(iterativeAppID);
+	public boolean isTerminated(JobID jobid) throws IOException {
+		return jobSubmitClient.shouldTerminated(jobid);
 	}
   }
 
@@ -931,13 +931,15 @@ public class JobClient extends Configured implements MRConstants, Tool  {
         	  }else if(joinType == Projector.Type.ONE2ALL){
         		  dynamicParts = reduces;			//use the original setting
         		  reduces = (int)Math.ceil((double)estInputSize/blocksize);  //the static data is partitioned based on block size to ensure each partition in a single block
+        		  if(reduces == 1) reduces = dynamicParts;
+        		  
         		  jobCopy.setNumReduceTasks(reduces);
         		  
         		  jobCopy.set("mapred.iterative.jointype", "one2all");
         	  }else{
         		  LOG.info("estimate size is " + estInputSize);
             	  int scala = (int)Math.ceil((double)estInputSize/(blocksize*reduces));
-            	  dynamicParts = reduces;	
+            	  dynamicParts = reduces;
             	  jobCopy.setInt("mapred.iterative.dynamicdata.partitions", dynamicParts);	//will be used in the partition function
             	  reduces = reduces * scala;
             	  jobCopy.setNumReduceTasks(reduces);
@@ -1375,7 +1377,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
 	    }
 	    
 	    //rj.waitForCompletion();
-	    return !rj.isTerminated(job.getIterativeAlgorithmID());
+	    return !rj.isTerminated(rj.getID());
 	  }
   
   /**
