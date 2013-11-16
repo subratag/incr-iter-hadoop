@@ -18,6 +18,7 @@ import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.IFile;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.KeyValueTextInputFormat;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -27,12 +28,23 @@ import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.mapred.lib.IdentityMapper;
-import org.apache.hadoop.mapred.lib.IntTextKVInputFormat;
 
 public class UpdateKmeansData {
 
 	public static final int DEFAULT_DIM_NUM = 10;
 	public static final int DEFAULT_VALUE_RANGE = 100;
+	
+	public static class UpdateDataMap extends MapReduceBase implements
+		Mapper<Text, Text, IntWritable, Text> {
+
+		@Override
+		public void map(Text key, Text value,
+				OutputCollector<IntWritable, Text> output, Reporter reporter)
+				throws IOException {
+			output.collect(new IntWritable(Integer.parseInt(key.toString())), value);
+		}
+		
+	}
 	
 	public static class UpdateDataReduce extends MapReduceBase implements
 		Reducer<IntWritable, Text, IntWritable, Text> {
@@ -159,7 +171,7 @@ public class UpdateKmeansData {
 	}
 
 	private static void printUsage() {
-		System.out.println("updatekm <OldStatic> <UpdateGraph> <DeltaGraph>");
+		System.out.println("genkmupdate <OldStatic> <UpdateGraph> <DeltaGraph>");
 		System.out.println(	"\t-p # of parittions\n" +
 							"\t-n # of possible dimentions\n" +
 							"\t-v dim_value range\n" +
@@ -242,7 +254,7 @@ public class UpdateKmeansData {
 	    String jobname0 = "Kmeans Update Generation";
 	    job0.setJobName(jobname0);
 	    
-	    job0.setInputFormat(IntTextKVInputFormat.class);
+	    job0.setInputFormat(KeyValueTextInputFormat.class);
 	    job0.setOutputFormat(TextOutputFormat.class);
 	    FileInputFormat.addInputPath(job0, new Path(input));
 	    FileOutputFormat.setOutputPath(job0, new Path(update_output));

@@ -587,15 +587,13 @@ public class IterKmeans {
 	    
 	    String inStatic = other_args.get(0);
 	    String output = other_args.get(1);
+	    int k = Integer.parseInt(other_args.get(2));
 	    
 	    String iteration_id = "kmeans" + new Date().getTime();
 	    
-	    int k = Integer.parseInt(other_args.get(2));
-		
 		/**
 		 * the initialization job, for partition the data and workload
 		 */
-	    
 	    long initstart = System.currentTimeMillis();
 	    
 	    JobConf job1 = new JobConf(IterKmeans.class);
@@ -613,14 +611,12 @@ public class IterKmeans {
 
 	    job1.setMapperClass(DistributeDataMap.class);
 		job1.setReducerClass(DistributeDataReduce.class);
+		job1.setProjectorClass(KmeansProjector.class);
 
 	    job1.setMapOutputKeyClass(IntWritable.class);
 	    job1.setMapOutputValueClass(Text.class);
 	    job1.setOutputKeyClass(IntWritable.class);
 	    job1.setOutputValueClass(Text.class);
-	    
-	    //new added
-	    job1.setProjectorClass(KmeansProjector.class);
 	    
 	    job1.setNumReduceTasks(partitions);
 	    
@@ -632,61 +628,54 @@ public class IterKmeans {
 	    /**
 	     * start iterative application jobs
 	     */
-	    
-	    int iteration = 1;
-	    boolean cont = true;
-	    
 	    long itertime = 0;
-	    
-	    while(cont && iteration < max_iterations){
-	    	long iterstart = System.currentTimeMillis();
-	    	
-		    JobConf job = new JobConf(IterKmeans.class);
-		    String jobname = "Kmeans Main " + iteration;
-		    job.setJobName(jobname);
-	    
-		    if(partitions == 0) partitions = Util.getTTNum(job);
-		    
-		    //set for iterative process   
-		    job.setIterative(true);
-		    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-		    //job.setIterationNum(iteration);					//iteration number
-		    job.setCheckPointInterval(interval);					//checkpoint interval
-		    //job.setDynamicDataPath(instate);				//init by file, if not set init by API
-		    job.setStaticDataPath(output + "/substatic");
-		    job.setStaticInputFormat(IntTextKVInputFormat.class);
-		    job.setDynamicInputFormat(GlobalDataInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
-		    //job.setResultInputFormat(IntCenterKVInputFormat.class);
-		    job.setOutputFormat(GlobalDataOutputFormat.class);
-		    
-		    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
-		    FileOutputFormat.setOutputPath(job, new Path(output + "/iteration-" + iteration));
-		    job.setGlobalUniqValuePath(output + "/centers");
-		    job.set("kmeans.init.center.path", output + "/centers/iteration-0");
-
-		    if(max_iterations == Integer.MAX_VALUE){
-		    	job.setDistanceThreshold(1);
-		    }
+    	long iterstart = System.currentTimeMillis();
+    	
+	    JobConf job = new JobConf(IterKmeans.class);
+	    String jobname = "Iter Kmeans Main ";
+	    job.setJobName(jobname);
     
-		    job.setMapOutputKeyClass(IntWritable.class);
-		    job.setMapOutputValueClass(Text.class);
-		    job.setOutputKeyClass(IntWritable.class);
-		    job.setOutputValueClass(CenterWritable.class);
-		    
-		    job.setIterativeMapperClass(KmeansMap.class);	
-		    job.setIterativeReducerClass(KmeansReduce.class);
-		    job.setProjectorClass(KmeansProjector.class);
-		    
-		    job.setNumReduceTasks(partitions);			
+	    if(partitions == 0) partitions = Util.getTTNum(job);
+	    
+	    //set for iterative process   
+	    job.setIterative(true);
+	    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
+	    job.setMaxIterations(max_iterations);
+	    job.setCheckPointInterval(interval);					//checkpoint interval
+	    //job.setDynamicDataPath(instate);				//init by file, if not set init by API
+	    job.setStaticDataPath(output + "/substatic");
+	    job.setInitWithFileOrApp(false);
+	    job.setStaticInputFormat(IntTextKVInputFormat.class);
+	    job.setDynamicInputFormat(GlobalDataInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
+	    //job.setResultInputFormat(IntCenterKVInputFormat.class);
+	    job.setOutputFormat(GlobalDataOutputFormat.class);
+	    
+	    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
+	    FileOutputFormat.setOutputPath(job, new Path(output + "/result"));
+	    
+	    job.setGlobalUniqValuePath(output + "/centers");
+	    job.set("kmeans.init.center.path", output + "/centers/iteration-0");
 
-		    cont = JobClient.runIterativeJob(job);
-
-	    	long iterend = System.currentTimeMillis();
-	    	itertime += (iterend - iterstart) / 1000;
-	    	Util.writeLog("iter.kmeans.log", "iteration computation " + iteration + " takes " + itertime + " s");
-	    	
-	    	iteration++;
+	    if(max_iterations == Integer.MAX_VALUE){
+	    	job.setDistanceThreshold(1);
 	    }
+
+	    job.setMapOutputKeyClass(IntWritable.class);
+	    job.setMapOutputValueClass(Text.class);
+	    job.setOutputKeyClass(IntWritable.class);
+	    job.setOutputValueClass(CenterWritable.class);
+	    
+	    job.setIterativeMapperClass(KmeansMap.class);	
+	    job.setIterativeReducerClass(KmeansReduce.class);
+	    job.setProjectorClass(KmeansProjector.class);
+	    
+	    job.setNumReduceTasks(partitions);			
+
+	    JobClient.runIterativeJob(job);
+
+    	long iterend = System.currentTimeMillis();
+    	itertime += (iterend - iterstart) / 1000;
+    	Util.writeLog("iter.kmeans.log", "iteration computation takes " + itertime + " s");
 	    
 		return 0;
 	}

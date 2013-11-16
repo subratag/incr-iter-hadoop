@@ -722,11 +722,11 @@ public class JobConf extends Configuration {
 	}
 	
 	//set init method
-	public void setInitStatePathOrApp(boolean stateOrApp) {
+	public void setInitWithFileOrApp(boolean stateOrApp) {
 		setBoolean("mapred.iterative.init.stateorpath", stateOrApp);
 	}
 	
-	public boolean getInitStatePathOrApp() {
+	public boolean getInitWithFileOrApp() {
 		return getBoolean("mapred.iterative.init.stateorpath", true);
 	}
 	

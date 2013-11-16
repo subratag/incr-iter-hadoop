@@ -426,6 +426,11 @@ class LocalJobRunner implements JobSubmissionProtocol {
 		// TODO Auto-generated method stub
 		return null;
 	}
+
+	@Override
+	public MapReduceOutputReadyEvent getMapReduceOutputReadyEvent(JobID jobid, int iteration) throws IOException {
+		return null;
+	}
     
   }
 
@@ -601,7 +606,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
   }
 
 @Override
-public boolean shouldTerminated(String iterativeAppID) throws IOException {
+public boolean shouldTerminated(JobID jobid) throws IOException {
 	return false;
 }
 

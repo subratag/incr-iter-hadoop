@@ -151,5 +151,8 @@ interface InterTrackerProtocol extends VersionedProtocol {
   
   //
   public void reportIterativeTaskCompletionEvent(IterativeTaskCompletionEvent event) throws IOException;
+  public MapReduceOutputReadyEvent queryOutputReadyEvent(JobID job, int iteration) throws IOException;
   public void reportGlobalData(GlobalData globaldata) throws IOException;
+
+  boolean shouldTerminated(JobID jobid) throws IOException;
 }

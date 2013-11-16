@@ -151,6 +151,11 @@ public class IsolationRunner {
 		// TODO Auto-generated method stub
 		return null;
 	}
+
+	@Override
+	public MapReduceOutputReadyEvent getMapReduceOutputReadyEvent(JobID jobid, int iteration) throws IOException {
+		return null;
+	}
   }
   
   private ClassLoader makeClassLoader(JobConf conf, 

@@ -235,6 +235,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  long avgMapRunTime = -1;
 	  long avgReduceRecords = -1;
 	  long avgReduceRunTime = -1;
+	  boolean mapsComplete = false;
+	  boolean reducesComplete = false;
   }
   
   public static class PartInfo{
@@ -245,7 +247,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  float subDistance = 0;
   }
 	
-  private Map<String, IterativeAppInfo> iterationInfoMap = new HashMap<String, IterativeAppInfo>();
+  private Map<JobID, IterativeAppInfo> iterationInfoMap = new HashMap<JobID, IterativeAppInfo>();
   
   public static class GlobalDataInfo{
 	  int sum = 0;
@@ -5445,107 +5447,112 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		int maps = jobs.get(jobid).getJobConf().getNumMapTasks();
 		int reduces = jobs.get(jobid).getJobConf().getNumReduceTasks();
 		
-		LOG.info("iterative task " + partitionID + " task completion event received!" +
+		LOG.info("job " + jobid + 
+				"\niterative task " + partitionID + " task completion event received!" +
 				"\nis Map? " + isMap +
 				"\nTotal records: " + processedRecords + 
 				"\nrun time: " + runTime + 
 				"\nsub distance: " + subDistance);
 		
-		if(iterationInfoMap.get(iterativeAppID) == null){			
-			iterationInfoMap.put(iterativeAppID, new IterativeAppInfo());
+		if(iterationInfoMap.get(jobid) == null){			
+			iterationInfoMap.put(jobid, new IterativeAppInfo());
 		}
 		
-		if(iterationInfoMap.get(iterativeAppID).iterativeJobInfo.get(iteration) == null){
-			iterationInfoMap.get(iterativeAppID).iterativeJobInfo.put(iteration, new IterationInfo());
+		if(iterationInfoMap.get(jobid).iterativeJobInfo.get(iteration) == null){
+			iterationInfoMap.get(jobid).iterativeJobInfo.put(iteration, new IterationInfo());
 		}
 		
-		IterationInfo jobinfo = iterationInfoMap.get(iterativeAppID).iterativeJobInfo.get(iteration);
-		if(jobinfo.partinfo.get(partitionID) == null){
+		IterationInfo iterationInfo = iterationInfoMap.get(jobid).iterativeJobInfo.get(iteration);
+		if(iterationInfo.partinfo.get(partitionID) == null){
 			LOG.info("add some partition info");
 			
 			PartInfo partinfo = new PartInfo();
-			jobinfo.partinfo.put(partitionID, partinfo);
+			iterationInfo.partinfo.put(partitionID, partinfo);
 		}
 		
 		if(isMap){
-			if(jobinfo.partinfo.get(partitionID).mapRecords == 0){
+			if(iterationInfo.partinfo.get(partitionID).mapRecords == 0){
 				//avoid duplicate report
-				jobinfo.finishedMaps++;
+				iterationInfo.finishedMaps++;
+				LOG.info("map task " + partitionID + " finished!");
 			}
-			jobinfo.partinfo.get(partitionID).mapRecords = processedRecords;
-			jobinfo.partinfo.get(partitionID).mapRunTime = runTime;
+			iterationInfo.partinfo.get(partitionID).mapRecords = processedRecords;
+			iterationInfo.partinfo.get(partitionID).mapRunTime = runTime;
 		}else{
-			if(jobinfo.partinfo.get(partitionID).reduceRecords == 0){
+			if(iterationInfo.partinfo.get(partitionID).reduceRecords == 0){
 				//avoid duplicate report			
-				jobinfo.finishedReduces++;
+				iterationInfo.finishedReduces++;
+				LOG.info("reduce task " + partitionID + " finished!");
 			}
 			
-			jobinfo.partinfo.get(partitionID).reduceRecords = processedRecords;
-			jobinfo.partinfo.get(partitionID).reduceRunTime = runTime;
-			jobinfo.partinfo.get(partitionID).subDistance = subDistance;
-			if(processedRecords < jobinfo.minReduceRecords){
-				jobinfo.minReduceRecords = processedRecords;
+			iterationInfo.partinfo.get(partitionID).reduceRecords = processedRecords;
+			iterationInfo.partinfo.get(partitionID).reduceRunTime = runTime;
+			iterationInfo.partinfo.get(partitionID).subDistance = subDistance;
+			if(processedRecords < iterationInfo.minReduceRecords){
+				iterationInfo.minReduceRecords = processedRecords;
 			}
-			if(processedRecords > jobinfo.maxReduceRecords){
-				jobinfo.maxReduceRecords = processedRecords;
+			if(processedRecords > iterationInfo.maxReduceRecords){
+				iterationInfo.maxReduceRecords = processedRecords;
 			}
-			if(runTime < jobinfo.minReduceRunTime){
-				jobinfo.minReduceRunTime = runTime;
+			if(runTime < iterationInfo.minReduceRunTime){
+				iterationInfo.minReduceRunTime = runTime;
 			}
-			if(runTime > jobinfo.maxReduceRunTime){
-				jobinfo.maxReduceRunTime = runTime;
+			if(runTime > iterationInfo.maxReduceRunTime){
+				iterationInfo.maxReduceRunTime = runTime;
 			}
 		}
 	
-		if(jobinfo.finishedMaps > maps){
+		if(iterationInfo.finishedMaps > maps){
 			throw new IOException("received more than the possible map results!");
 		}
 		
-		if(jobinfo.finishedReduces > reduces){
+		if(iterationInfo.finishedReduces > reduces){
 			throw new IOException("received more than the possible reduce results!");
 		}
 		
+		LOG.info("finish maps " + iterationInfo.finishedMaps + " partitions " + maps);
 		//all map tasks finished, do some statistics
-		if(jobinfo.finishedMaps == maps){
+		if(!iterationInfo.mapsComplete && iterationInfo.finishedMaps == maps){
 			long totalrecords = 0;
 			long totalruntime = 0;
-			for(Map.Entry<Integer, PartInfo> entry : jobinfo.partinfo.entrySet()){
+			for(Map.Entry<Integer, PartInfo> entry : iterationInfo.partinfo.entrySet()){
 				long records = entry.getValue().mapRecords;
 				long runtime = entry.getValue().mapRunTime;
 				
 				totalrecords += records;
 				totalruntime += runtime;
 				
-				if(records < jobinfo.minMapRecords){
-					jobinfo.minMapRecords = records;
+				if(records < iterationInfo.minMapRecords){
+					iterationInfo.minMapRecords = records;
 				}
-				if(records > jobinfo.maxMapRecords){
-					jobinfo.maxMapRecords = records;
+				if(records > iterationInfo.maxMapRecords){
+					iterationInfo.maxMapRecords = records;
 				}
-				if(runtime < jobinfo.minMapRunTime){
-					jobinfo.minMapRunTime = runtime;
+				if(runtime < iterationInfo.minMapRunTime){
+					iterationInfo.minMapRunTime = runtime;
 				}
-				if(runTime > jobinfo.maxMapRunTime){
-					jobinfo.maxMapRunTime = runtime;
+				if(runTime > iterationInfo.maxMapRunTime){
+					iterationInfo.maxMapRunTime = runtime;
 				}
 			}
 			
-			jobinfo.avgMapRecords = totalrecords / jobinfo.partinfo.size();
-			jobinfo.avgMapRunTime = totalruntime / jobinfo.partinfo.size();
+			iterationInfo.avgMapRecords = totalrecords / iterationInfo.partinfo.size();
+			iterationInfo.avgMapRunTime = totalruntime / iterationInfo.partinfo.size();
 			
-			//do some thing
+			iterationInfo.mapsComplete = true;
 			
+			//notify the reducers to start
 		}
 		
-		LOG.info("finish reduces " + jobinfo.finishedReduces + " partitions " + reduces);
+		LOG.info("finish reduces " + iterationInfo.finishedReduces + " partitions " + reduces);
 		
 		//all reduce tasks finished, do some statistics and termination check
-		if(jobinfo.finishedReduces == reduces){
+		if(!iterationInfo.reducesComplete && iterationInfo.finishedReduces == reduces){
 			float totaldifference = 0;
 			long totalrecords = 0;
 			long totalruntime = 0;
 			
-			for(Map.Entry<Integer, PartInfo> entry : jobinfo.partinfo.entrySet()){
+			for(Map.Entry<Integer, PartInfo> entry : iterationInfo.partinfo.entrySet()){
 				totaldifference += entry.getValue().subDistance;
 				
 				long records = entry.getValue().reduceRecords;
@@ -5554,22 +5561,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				totalrecords += records;
 				totalruntime += runtime;
 				
-				if(records < jobinfo.minReduceRecords){
-					jobinfo.minReduceRecords = records;
+				if(records < iterationInfo.minReduceRecords){
+					iterationInfo.minReduceRecords = records;
 				}
-				if(records > jobinfo.maxReduceRecords){
-					jobinfo.maxReduceRecords = records;
+				if(records > iterationInfo.maxReduceRecords){
+					iterationInfo.maxReduceRecords = records;
 				}
-				if(runtime < jobinfo.minReduceRunTime){
-					jobinfo.minReduceRunTime = runtime;
+				if(runtime < iterationInfo.minReduceRunTime){
+					iterationInfo.minReduceRunTime = runtime;
 				}
-				if(runTime > jobinfo.maxReduceRunTime){
-					jobinfo.maxReduceRunTime = runtime;
+				if(runTime > iterationInfo.maxReduceRunTime){
+					iterationInfo.maxReduceRunTime = runtime;
 				}
 			}
 			
-			jobinfo.avgReduceRecords = totalrecords / jobinfo.partinfo.size();
-			jobinfo.avgReduceRunTime = totalruntime / jobinfo.partinfo.size();
+			iterationInfo.avgReduceRecords = totalrecords / iterationInfo.partinfo.size();
+			iterationInfo.avgReduceRunTime = totalruntime / iterationInfo.partinfo.size();
+			
+			iterationInfo.reducesComplete = true;
 			
 			//do some thing
 			
@@ -5577,17 +5586,17 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			LOG.info("distance is " + totaldifference + " threshold is " + jobs.get(jobid).getJobConf().getDistanceThreshold());
 			
 			if(jobs.get(jobid).getJobConf().getDistanceThreshold() == -1){
-				iterationInfoMap.get(iterativeAppID).shouldterminate = false;
-			}else if(totaldifference <= jobs.get(jobid).getJobConf().getDistanceThreshold() && iterationNUM > 1){
+				iterationInfoMap.get(jobid).shouldterminate = false;
+			}else if(totaldifference <= jobs.get(jobid).getJobConf().getDistanceThreshold() && iteration > 1){
 				LOG.info("SHOULD TERMINATE!");
-				iterationInfoMap.get(iterativeAppID).shouldterminate = true;
+				iterationInfoMap.get(jobid).shouldterminate = true;
 			}
 		}
 	}
 
 	@Override
-	public boolean shouldTerminated(String iterativeAppID) throws IOException {
-		return iterationInfoMap.get(iterativeAppID).shouldterminate;
+	public boolean shouldTerminated(JobID jobid) throws IOException {
+		return iterationInfoMap.get(jobid).shouldterminate;
 	}
 
 	@Override
@@ -5632,4 +5641,23 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			globalDataMap.remove(jobid);
 		}
 	}
+
+	@Override
+	public MapReduceOutputReadyEvent queryOutputReadyEvent(JobID jobid, int iteration) throws IOException {
+		
+		if(iterationInfoMap.get(jobid) == null){			
+			return null;
+		}
+		
+		if(iterationInfoMap.get(jobid).iterativeJobInfo.get(iteration) == null){
+			return null;
+		}
+		
+		IterationInfo iterationInfo = iterationInfoMap.get(jobid).iterativeJobInfo.get(iteration);
+		MapReduceOutputReadyEvent event = new MapReduceOutputReadyEvent(iterationInfo.mapsComplete, iterationInfo.reducesComplete);
+		LOG.info("querying output ready event for " + jobid + " iteration " + iteration + 
+				" map ready ? " + iterationInfo.mapsComplete + " reduce ready ? " + iterationInfo.reducesComplete);
+		return event;
+	}
+
 }

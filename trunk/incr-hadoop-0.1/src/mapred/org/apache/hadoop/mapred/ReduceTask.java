@@ -120,97 +120,26 @@ class ReduceTask extends Task {
 		
 		private ReduceTask reducetask;
 		
-		private boolean isOpen = true;
-		
 		public MapOutputReadyChecker(TaskUmbilicalProtocol umbilical, ReduceTask reducetask) {
 			this.trackerUmbilical = umbilical;
 			this.reducetask = reducetask;
 		}
 
 		public void run() {
-			Set<TaskID> finishedMapTasks = new HashSet<TaskID>();
-			Set<TaskAttemptID>  mapTasks = new HashSet<TaskAttemptID>();
-			Map<Integer, HashSet<TaskAttemptID>> completeIterationTasks = new HashMap<Integer, HashSet<TaskAttemptID>>();
-			int completedIterationIndex = 0;
-
-			int eid = 0;
-			while (!isInterrupted() && isOpen) {
+			int iteration = 1;
+			while (!isInterrupted()/* && finishedReduceTasks.size() < getNumberOfInputs()+1*/) {
 				try {
-					MapTaskCompletionEventsUpdate updates = 
-						trackerUmbilical.getMapCompletionEvents(getJobID(), eid, Integer.MAX_VALUE, 
-								ReduceTask.this.getTaskID(), jvmContext);
+					synchronized(reducetask){
+						LOG.info("mapoutput ready check!");
+						MapReduceOutputReadyEvent mapreadyevent = trackerUmbilical.getMapReduceOutputReadyEvent(getJobID(), iteration);
 
-					LOG.info("get map completion events " + updates.events.length);
-					
-					//reporter.progress();
-					eid += updates.events.length;
-
-					// Process the TaskCompletionEvents:
-					// 1. Save the SUCCEEDED maps in knownOutputs to fetch the outputs.
-					// 2. Save the OBSOLETE/FAILED/KILLED maps in obsoleteOutputs to stop fetching
-					//    from those maps.
-					// 3. Remove TIPFAILED maps from neededOutputs since we don't need their
-					//    outputs at all.
-					for (TaskCompletionEvent event : updates.events) {
-						switch (event.getTaskStatus()) {
-						case FAILED:
-						case KILLED:
-						case OBSOLETE:
-						case TIPFAILED:
-						{
-							TaskAttemptID mapTaskId = event.getTaskAttemptId();
-							if (!mapTasks.contains(mapTaskId)) {
-								mapTasks.remove(mapTaskId);
+						if(mapreadyevent != null){
+							LOG.info("iteration " + iteration + " mapreadyevent is not null!");
+							if(mapreadyevent.isMapOutputReady()){
+								LOG.info("iteration " + iteration + " Map output is ready!");
+								reducetask.notifyAll();
+								iteration++;
 							}
-						}
-						break;
-						case SUCCEEDED:
-						{
-							LOG.info("SUCCEEDED event recieved!");
-							TaskAttemptID mapTaskId = event.getTaskAttemptId();
-							finishedMapTasks.add(mapTaskId.getTaskID());
-							
-							LOG.info("!!!task " + mapTaskId + " is completed! completed: " + 
-									finishedMapTasks.size() + " total: " + numMaps);
-							
-							synchronized(reducetask){
-								if(finishedMapTasks.size() >= numMaps){
-									LOG.info("have finished all!");
-									finishedMapTasks.clear();
-									reducetask.notifyAll();
-								}
-							}
-						}
-						case RUNNING:
-						{
-							LOG.info("RUNNING event recieved!");
-							TaskAttemptID mapTaskId = event.getTaskAttemptId();
-							int iteration = event.getIteration();
-							
-							if(!completeIterationTasks.containsKey(iteration)){
-								HashSet<TaskAttemptID> completedIterations = new HashSet<TaskAttemptID>();
-								completeIterationTasks.put(iteration, completedIterations);
-							}
-							
-							if(iteration > completedIterationIndex){
-								if(!completeIterationTasks.get(iteration).contains(mapTaskId)){
-									completeIterationTasks.get(iteration).add(mapTaskId);
-								}
-								
-								LOG.info("!!!iterative task " + iteration + ":" + mapTaskId + " is completed! completed: " + 
-										completeIterationTasks.get(iteration).size() + " total: " + numMaps);
-								
-								synchronized(reducetask){
-									if(iteration > completedIterationIndex && completeIterationTasks.get(iteration).size() >= numMaps){
-										LOG.info("have finished all incremental map for iteration " + iteration);
-										completedIterationIndex = iteration;
-										//finishedMapTasks.clear();
-										reducetask.notifyAll();
-									}
-								}
-							}
-						}
-						break;
 						}
 					}
 				}
@@ -219,7 +148,6 @@ class ReduceTask extends Task {
 				}
 
 				try {
-					//int waittime = mapTasks.size() == getNumberOfInputs() ? 60000 : 1000; i don't know why wait 60s
 					Thread.sleep(1000);
 				} catch (InterruptedException e) { return; }
 			}
@@ -2245,7 +2173,7 @@ class ReduceTask extends Task {
     }
     //the special case, for the case that is incremental iterative app, we use a single job
     else{
-    	long incrstarttime = System.currentTimeMillis();
+    	long starttime = System.currentTimeMillis();
     	
     	//create a new thread to control when to start
 		MapOutputReadyChecker mapchecker = new MapOutputReadyChecker(umbilical, this);
@@ -2337,13 +2265,13 @@ class ReduceTask extends Task {
 	                        keyClass, valueClass);
 	            }else if(job.isIncrementalIterative()){
 		        	runIncrementalIterativeReducer(job, umbilical, reporter, iteration, (RawKeyValueSourceIterator)rIter, comparator, 
-	                        keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass(), incrstarttime);
+	                        keyClass, valueClass, job.getStaticKeyClass(), job.getOutputValueClass(), starttime);
 	            }
 	            	
 	        	long time4 = System.currentTimeMillis();
 	        	
 	            LOG.info("iteration " + iteration + " reduce task " + this.getTaskID().getTaskID().getId() + " takes " + (time4 - time1) +
-	            		" ms copy phase " + (time2-time1) + " ms sort phase " + (time3-time2) + " ms reduce phase " + (time4-time3) + " ms");
+	            		" copy " + (time2-time1) + " sort " + (time3-time2) + " reduce " + (time4-time3) + " total " + (time4-starttime));
 	            
 	            if(iteration+1 > maxiteration) break;
 	            
@@ -3711,13 +3639,13 @@ class ReduceTask extends Task {
       //resultSet.close();
       values.close();		//close the k,sk,v writer
       reducer.close();
-      
+      /*
       boolean writeHDFS = (job.getMaxIterations() == iteration);
       if(writeHDFS){
     	  hdfs.copyFromLocalFile(false, preservedPath, remotePreservedPath);
     	  hdfs.copyFromLocalFile(false, newPreserveIndexPath, remotePreservedIndexPath);
       }
-
+	  */
       /*
       //if global data, need to send to jobtracker, then the jobtracker will combine them
       if(job.getGlobalUniqValuePath() != null) {

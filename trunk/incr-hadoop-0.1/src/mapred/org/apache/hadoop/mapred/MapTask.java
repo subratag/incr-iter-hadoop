@@ -693,7 +693,7 @@ class MapTask extends Task {
 	Projector<SK, DK, DV> projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
 	
 	if(job.getStaticDataPath() == null) throw new IOException("we need input data which is usually the static data!!!");
-	boolean initViaAPI = (iteration == 1) && (!job.getInitStatePathOrApp());
+	boolean initViaAPI = (iteration == 1) && (!job.getInitWithFileOrApp());
 
 	RecordReader<SK, SV> staticReader = getStaticReader(job, reporter);
 	RecordReader<DK, DV> dynamicReader = null;
