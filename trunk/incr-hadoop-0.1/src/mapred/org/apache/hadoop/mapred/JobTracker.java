@@ -251,10 +251,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   
   public static class GlobalDataInfo{
 	  int sum = 0;
+	  boolean complete = false;
 	  GlobalUniqValueWritable globaldata;
   }
   
-  private Map<JobID, GlobalDataInfo> globalDataMap = new HashMap<JobID, GlobalDataInfo>();
+  private Map<JobID, HashMap<Integer, GlobalDataInfo>> globalDataMap = new HashMap<JobID, HashMap<Integer, GlobalDataInfo>>();
   
   /**
    * {@link #nodesAtMaxLevel} is using the keySet from {@link ConcurrentHashMap}
@@ -5608,22 +5609,33 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		
 		LOG.info("global data received. jobid is " + jobid + "\titeration is " + iteration + "\tdata is " + globaldata.get());
 		
+		HashMap<Integer, GlobalDataInfo> iterationInfo;
 		if(!globalDataMap.containsKey(jobid)){
+			iterationInfo = new HashMap<Integer, GlobalDataInfo>();
+			
 			GlobalDataInfo gdatainfo = new GlobalDataInfo();
 			gdatainfo.globaldata = globaldata.get();
 			gdatainfo.sum = 1;
+			iterationInfo.put(iteration, gdatainfo);
 			
-			globalDataMap.put(jobid, gdatainfo);
+			globalDataMap.put(jobid, iterationInfo);
 		}else{
+			iterationInfo = globalDataMap.get(jobid);
+			if(!iterationInfo.containsKey(iteration)){
+				GlobalDataInfo gdatainfo = new GlobalDataInfo();
+				gdatainfo.globaldata = globaldata.get();
+				gdatainfo.sum = 1;
+				iterationInfo.put(iteration, gdatainfo);
+			}
 			//LOG.info("BEFORE: " + globalDataMap.get(jobid).globaldata);
-			globalDataMap.get(jobid).globaldata.aggregate(globaldata.get());
+			iterationInfo.get(iteration).globaldata.aggregate(globaldata.get());
 			//LOG.info("after: " + globalDataMap.get(jobid).globaldata);
-			globalDataMap.get(jobid).sum = globalDataMap.get(jobid).sum + 1;
+			iterationInfo.get(iteration).sum = iterationInfo.get(iteration).sum + 1;
 		}
 		
-		LOG.info("global data sum " + globalDataMap.get(jobid).sum + "\ttotal needed " + jobs.get(jobid).getJobConf().getNumReduceTasks());
+		LOG.info("global data sum " + iterationInfo.get(iteration).sum + "\ttotal needed " + jobs.get(jobid).getJobConf().getNumReduceTasks());
 		//collect all the data, then write it to HDFS
-		if(globalDataMap.get(jobid).sum == jobs.get(jobid).getJobConf().getNumReduceTasks()){
+		if(iterationInfo.get(iteration).sum == jobs.get(jobid).getJobConf().getNumReduceTasks()){
 			
 			JobConf job = jobs.get(jobid).getJobConf();
 			
@@ -5633,12 +5645,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	        FSDataOutputStream fileOut = fs.create(new Path(hdfsfileName), true);
 	        RecordWriter<GlobalUniqKeyWritable, GlobalUniqValueWritable> writer =
 	        		new LineRecordWriter<GlobalUniqKeyWritable, GlobalUniqValueWritable>(fileOut, keyValueSeparator);
-			writer.write(new GlobalUniqKeyWritable(), globalDataMap.get(jobid).globaldata);
+			writer.write(new GlobalUniqKeyWritable(), iterationInfo.get(iteration).globaldata);
 			writer.close(null);
 			
 			LOG.info("get all globaldata, written to HDFS! " + hdfsfileName);
 			
-			globalDataMap.remove(jobid);
+			iterationInfo.get(iteration).complete = true;
+			iterationInfo.get(iteration).globaldata = null;
 		}
 	}
 
@@ -5655,8 +5668,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		
 		IterationInfo iterationInfo = iterationInfoMap.get(jobid).iterativeJobInfo.get(iteration);
 		MapReduceOutputReadyEvent event = new MapReduceOutputReadyEvent(iterationInfo.mapsComplete, iterationInfo.reducesComplete);
+		boolean globalready = false;
+		if(globalDataMap.get(jobid) != null && globalDataMap.get(jobid).get(iteration) != null){
+			event.setGlobalDataReady(globalDataMap.get(jobid).get(iteration).complete);
+			globalready = true;
+		}
 		LOG.info("querying output ready event for " + jobid + " iteration " + iteration + 
-				" map ready ? " + iterationInfo.mapsComplete + " reduce ready ? " + iterationInfo.reducesComplete);
+				" map ready ? " + iterationInfo.mapsComplete + 
+				" reduce ready ? " + iterationInfo.reducesComplete + 
+				" global data ready ? " + globalready);
 		return event;
 	}
 

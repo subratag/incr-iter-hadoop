@@ -184,11 +184,11 @@ public class NaiveKmeans {
 			}
 		}
 		
-		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second, double norm1){
+		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Float> second, double norm1){
 			double cosine_sim = 0;
 			double norm2 = 0;
 			
-			for(Map.Entry<Integer, Integer> entry : second.entrySet()){
+			for(Map.Entry<Integer, Float> entry : second.entrySet()){
 				Double dim_value1 = first.get(entry.getKey());
 				if(dim_value1 != null){
 					cosine_sim += dim_value1 * entry.getValue();
@@ -202,8 +202,8 @@ public class NaiveKmeans {
 			return cosine_sim;
 		}
 		
-		private TreeMap<Integer, Integer> getDims(String line) throws IOException{
-			TreeMap<Integer, Integer> item_dims = new TreeMap<Integer, Integer>();
+		private TreeMap<Integer, Float> getDims(String line) throws IOException{
+			TreeMap<Integer, Float> item_dims = new TreeMap<Integer, Float>();
     		StringTokenizer st = new StringTokenizer(line);
     		while(st.hasMoreTokens()){
     			String element = st.nextToken();
@@ -215,7 +215,7 @@ public class NaiveKmeans {
     			
     			try{
     				int dim_id = Integer.parseInt(element.substring(0, index));
-        			int dim_value = Integer.parseInt(element.substring(index+1));
+        			float dim_value = Float.parseFloat(element.substring(index+1));
         			item_dims.put(dim_id, dim_value);
     			}catch (NumberFormatException e){}
     		}
@@ -236,7 +236,7 @@ public class NaiveKmeans {
 			report.setStatus(String.valueOf(count));
 
 			//System.out.println(key + "\t" + value);
-			TreeMap<Integer, Integer> item_dims = getDims(value.toString());
+			TreeMap<Integer, Float> item_dims = getDims(value.toString());
 			//System.out.println(item_dims.size());
 			
 			double maxSim = -1;
@@ -275,7 +275,7 @@ public class NaiveKmeans {
 			//input value: item-id data
 
 			int num = 0;
-			TreeMap<Integer, Integer> center_dims = new TreeMap<Integer, Integer>();
+			TreeMap<Integer, Float> center_dims = new TreeMap<Integer, Float>();
 			while(values.hasNext()) {		
 				String line = values.next().toString();
 	    		StringTokenizer st = new StringTokenizer(line);
@@ -289,9 +289,9 @@ public class NaiveKmeans {
 	    			
 	    			try{
 		    			int dim_id = Integer.parseInt(element.substring(0, index));
-		    			int dim_value = Integer.parseInt(element.substring(index+1));
+		    			float dim_value = Float.parseFloat(element.substring(index+1));
 		    			
-		    			Integer oldv = center_dims.get(dim_id);
+		    			Float oldv = center_dims.get(dim_id);
 		    			if(oldv == null){
 		    				center_dims.put(dim_id, dim_value);
 		    			}else{
@@ -303,9 +303,9 @@ public class NaiveKmeans {
 			}
 			
 			String outputstring = "";
-			for(Map.Entry<Integer, Integer> entry : center_dims.entrySet()){
+			for(Map.Entry<Integer, Float> entry : center_dims.entrySet()){
 				int dim_id = entry.getKey();
-				int dim_value = entry.getValue();
+				float dim_value = entry.getValue();
 				double avg_value = (double)dim_value/num;
 				outputstring += dim_id + "," + avg_value + " ";
 			}
