@@ -43,21 +43,25 @@ public class TrimDimsForKM extends Configured implements Tool {
 			String[] dims_str = value.toString().split(" ");
 			
 			HashMap<Integer, Integer> dims = new HashMap<Integer, Integer>();
+			int total = 0;
 			
 			for(String dim_str : dims_str){
 				String[] item = dim_str.split(",");
 				if(item.length != 2) continue;
 				int dim_id = Integer.parseInt(item[0]) % dim_num;
+				int dim_value = Integer.parseInt(item[1]);
 				if(dims.containsKey(dim_id)){
-					dims.put(dim_id, Integer.parseInt(item[1]) + dims.get(dim_id));
+					dims.put(dim_id, dim_value + dims.get(dim_id));
 				}else{
-					dims.put(dim_id, Integer.parseInt(item[1]));
+					dims.put(dim_id, dim_value);
 				}
+				
+				total += dim_value;
 			}
 			
 			String out_str = "";
 			for(Map.Entry<Integer, Integer> dim : dims.entrySet()){
-				out_str += dim.getKey() + "," + dim.getValue() + " ";
+				out_str += dim.getKey() + "," + ((float)dim.getValue()/total) + " ";
 			}
 			
 			output.collect(key, new Text(out_str));

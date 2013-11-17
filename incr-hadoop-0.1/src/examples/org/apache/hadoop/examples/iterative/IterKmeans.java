@@ -205,7 +205,7 @@ public class IterKmeans {
 		public void configure(JobConf job){
 			conf = job;
 			k = job.getInt("kmeans.cluster.k", 0);
-			initCenterDir = job.get("kmeans.init.center.path");
+			initCenterDir = job.getInitStatePath();
 		}
 		
 		@Override
@@ -256,8 +256,8 @@ public class IterKmeans {
 		    			}
 		    			
 		    			int dim_id = Integer.parseInt(item.substring(0, index));
-		    			int dim_value = Integer.parseInt(item.substring(index+1));
-		    			center.put(dim_id, (double)dim_value);
+		    			double dim_value = Double.parseDouble(item.substring(index+1));
+		    			center.put(dim_id, dim_value);
 					}
 					initCenters.put(new IntWritable(centerIndex), new CenterWritable(center));
 					centerIndex++;
@@ -292,11 +292,11 @@ public class IterKmeans {
 		private TreeMap<Integer, Double> centernorm = new TreeMap<Integer, Double>();
 		private int count = 0;
 		
-		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Integer> second, double norm1){
+		private double similarity(TreeMap<Integer, Double> first, TreeMap<Integer, Float> second, double norm1){
 			double cosine_sim = 0;
 			double norm2 = 0;
 			
-			for(Map.Entry<Integer, Integer> entry : second.entrySet()){
+			for(Map.Entry<Integer, Float> entry : second.entrySet()){
 				Double dim_value1 = first.get(entry.getKey());
 				if(dim_value1 != null){
 					cosine_sim += dim_value1 * entry.getValue();
@@ -340,7 +340,7 @@ public class IterKmeans {
 			count++;
 			reporter.setStatus(String.valueOf(count));
 
-			TreeMap<Integer, Integer> item_dims = new TreeMap<Integer, Integer>();
+			TreeMap<Integer, Float> item_dims = new TreeMap<Integer, Float>();
 			String line = staticval.toString();
     		StringTokenizer st = new StringTokenizer(line);
     		while(st.hasMoreTokens()){
@@ -351,7 +351,7 @@ public class IterKmeans {
     			}
     			
     			int dim_id = Integer.parseInt(element.substring(0, index));
-    			int dim_value = Integer.parseInt(element.substring(index+1));
+    			float dim_value = Float.parseFloat(element.substring(index+1));
     			
     			item_dims.put(dim_id, dim_value);
     		}
@@ -367,10 +367,10 @@ public class IterKmeans {
 					System.out.println(statickey + "\tsim: " + similarity + "\t" +  centernorm.get(centerid));
 				
 					double cosine_sim = 0;
-					long norm2_sum = 0;
+					double norm2_sum = 0;
 					double norm2 = 0;
 					
-					for(Map.Entry<Integer, Integer> entry : item_dims.entrySet()){
+					for(Map.Entry<Integer, Float> entry : item_dims.entrySet()){
 						Double dim_value1 = centerdata.get(entry.getKey());
 						if(dim_value1 != null){
 							cosine_sim += dim_value1 * entry.getValue();
@@ -417,7 +417,7 @@ public class IterKmeans {
 			//input value: user-id data
 
 			int num = 0;
-			TreeMap<Integer, Integer> all_items = new TreeMap<Integer, Integer>();
+			TreeMap<Integer, Float> all_items = new TreeMap<Integer, Float>();
 			//System.out.println("input key is: " + key);
 			while(values.hasNext()) {		
 				String line = values.next().toString();
@@ -431,9 +431,9 @@ public class IterKmeans {
 	    			}
 	    			
 	    			int dim_id = Integer.parseInt(element.substring(0, index));
-	    			int dim_value = Integer.parseInt(element.substring(index+1));
+	    			float dim_value = Float.parseFloat(element.substring(index+1));
 	    			
-	    			Integer oldv = all_items.get(dim_id);
+	    			Float oldv = all_items.get(dim_id);
 	    			if(oldv == null){
 	    				all_items.put(dim_id, dim_value);
 	    			}else{
@@ -444,16 +444,16 @@ public class IterKmeans {
 			}
 
 			TreeMap<Integer, Double> avg = new TreeMap<Integer, Double>();
-			for(Map.Entry<Integer, Integer> entry : all_items.entrySet()){
+			for(Map.Entry<Integer, Float> entry : all_items.entrySet()){
 				int dim_id = entry.getKey();
-				int dim_value = entry.getValue();
+				float dim_value = entry.getValue();
 				double avgscore = (double)dim_value/num;
 				avg.put(dim_id, avgscore);
 			}
 			
 			output.collect(new IntWritable(key.get()), new CenterWritable(avg));
 			
-			System.out.println("output " + key + "\t" + avg.get(avg.firstKey()));
+			//System.out.println("output " + key + "\t" + avg.get(avg.firstKey()));
 		}
 
 		@Override
@@ -500,7 +500,7 @@ public class IterKmeans {
 			//the inputformat can only be retrieved in the iterative job, and the initial value
 			if(job.isIterative()){
 				try{
-					Path initcenterpath = new Path(job.get("kmeans.init.center.path"));
+					Path initcenterpath = new Path(job.getInitStatePath());
 					FileSystem hdfs = FileSystem.get(job);
 					long filelen = hdfs.getFileStatus(initcenterpath).getLen();
 					
@@ -539,10 +539,13 @@ public class IterKmeans {
 	}
 
 	private static void printUsage() {
-		System.out.println("iterkmeans [-p partitions] <inStaticDir> <outDir> <k>");
+		System.out.println("iterkmeans <inStaticDir> <outDir> <k>");
 		System.out.println(	"\t-p # of parittions\n" +
 							"\t-i snapshot interval\n" +
-							"\t-I # of iterations\n");
+							"\t-I # of iterations\n" +
+							"\t-D initial dynamic path\n" +
+							"\t-f input format\n" + 
+							"\t-s run preserve job");
 	}
 
 	public static int main(String[] args) throws Exception {
@@ -553,30 +556,32 @@ public class IterKmeans {
 		int partitions = 0;
 		int interval = 2;
 		int max_iterations = Integer.MAX_VALUE;
-		
+		String init_dynamic = "";		
 		
 		List<String> other_args = new ArrayList<String>();
 		for(int i=0; i < args.length; ++i) {
-		      try {
-		          if ("-p".equals(args[i])) {
-		        	partitions = Integer.parseInt(args[++i]);
-		          } else if ("-i".equals(args[i])) {
-		        	interval = Integer.parseInt(args[++i]);
-		          } else if ("-I".equals(args[i])) {
-		        	  max_iterations = Integer.parseInt(args[++i]);
-		          } else {
-		    		  other_args.add(args[i]);
-		    	  }
-		      } catch (NumberFormatException except) {
-		        System.out.println("ERROR: Integer expected instead of " + args[i]);
-		        printUsage();
-		        return -1;
-		      } catch (ArrayIndexOutOfBoundsException except) {
-		        System.out.println("ERROR: Required parameter missing from " +
-		                           args[i-1]);
-		        printUsage();
-		        return -1;
-		      }
+	      try {
+	          if ("-p".equals(args[i])) {
+	        	partitions = Integer.parseInt(args[++i]);
+	          } else if ("-i".equals(args[i])) {
+	        	interval = Integer.parseInt(args[++i]);
+	          } else if ("-I".equals(args[i])) {
+	        	  max_iterations = Integer.parseInt(args[++i]);
+	          } else if ("-D".equals(args[i])) {
+	        	  init_dynamic = args[++i];
+	          } else {
+	    		  other_args.add(args[i]);
+	    	  }
+	      } catch (NumberFormatException except) {
+	        System.out.println("ERROR: Integer expected instead of " + args[i]);
+	        printUsage();
+	        return -1;
+	      } catch (ArrayIndexOutOfBoundsException except) {
+	        System.out.println("ERROR: Required parameter missing from " +
+	                           args[i-1]);
+	        printUsage();
+	        return -1;
+	      }
 		}
 		
 	    if (other_args.size() < 3) {
@@ -607,7 +612,10 @@ public class IterKmeans {
 	    TextInputFormat.addInputPath(job1, new Path(inStatic));
 	    FileOutputFormat.setOutputPath(job1, new Path(output + "/substatic"));
 	    job1.setInt("kmeans.cluster.k", k);
-	    job1.set("kmeans.init.center.path", output + "/centers/iteration-0");
+	    
+	    //prepare the initial state data, it might be used later
+	    job1.setInitStatePath(output + "/centers/iteration-0");
+	    //job1.set("kmeans.init.center.path", output + "/centers/iteration-0");
 
 	    job1.setMapperClass(DistributeDataMap.class);
 		job1.setReducerClass(DistributeDataReduce.class);
@@ -640,26 +648,33 @@ public class IterKmeans {
 	    //set for iterative process   
 	    job.setIterative(true);
 	    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-	    job.setMaxIterations(max_iterations);
-	    job.setCheckPointInterval(interval);					//checkpoint interval
-	    //job.setDynamicDataPath(instate);				//init by file, if not set init by API
+	    
+	    if(max_iterations == Integer.MAX_VALUE){
+	    	job.setDistanceThreshold(1);
+	    }else{
+	    	job.setMaxIterations(max_iterations);
+	    }
+	    job.setCheckPointInterval(interval);	
+	    
+	    //kmeans always init with file
+	    if(init_dynamic == ""){
+	    	job.setInitWithFileOrApp(false);
+	    	job.setInitStatePath(output + "/centers/iteration-0");
+	    }else{
+	    	job.setInitWithFileOrApp(false);
+	    	job.setInitStatePath(init_dynamic);
+	    }
 	    job.setStaticDataPath(output + "/substatic");
-	    job.setInitWithFileOrApp(false);
+	    job.setGlobalUniqValuePath(output + "/centers");
+	    
 	    job.setStaticInputFormat(IntTextKVInputFormat.class);
 	    job.setDynamicInputFormat(GlobalDataInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
-	    //job.setResultInputFormat(IntCenterKVInputFormat.class);
+	    //job.setResultInputFormat(IntCenterKVInputFormat.class);	//for kmeans, we don't want to check the threshold, we only set max iterations
 	    job.setOutputFormat(GlobalDataOutputFormat.class);
 	    
 	    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
 	    FileOutputFormat.setOutputPath(job, new Path(output + "/result"));
 	    
-	    job.setGlobalUniqValuePath(output + "/centers");
-	    job.set("kmeans.init.center.path", output + "/centers/iteration-0");
-
-	    if(max_iterations == Integer.MAX_VALUE){
-	    	job.setDistanceThreshold(1);
-	    }
-
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(Text.class);
 	    job.setOutputKeyClass(IntWritable.class);
@@ -669,8 +684,7 @@ public class IterKmeans {
 	    job.setIterativeReducerClass(KmeansReduce.class);
 	    job.setProjectorClass(KmeansProjector.class);
 	    
-	    job.setNumReduceTasks(partitions);			
-
+	    job.setNumReduceTasks(partitions);		
 	    JobClient.runIterativeJob(job);
 
     	long iterend = System.currentTimeMillis();

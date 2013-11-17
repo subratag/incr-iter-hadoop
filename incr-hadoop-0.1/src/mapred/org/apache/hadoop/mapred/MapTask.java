@@ -89,20 +89,22 @@ class MapTask extends Task {
 	private class ReduceOutputFetcher extends Thread {
 		private TaskUmbilicalProtocol trackerUmbilical;
 		private MapTask maptask;
+		private Projector.Type type;
 		
-		public ReduceOutputFetcher(TaskUmbilicalProtocol trackerUmbilical, MapTask maptask) {
+		public ReduceOutputFetcher(TaskUmbilicalProtocol trackerUmbilical, MapTask maptask, Projector.Type type) {
 			this.trackerUmbilical = trackerUmbilical;
 			this.maptask = maptask;
+			this.type = type;
 		}
 
-		public void run() {
+		private void run_one2one(){
 			int iteration = 1;
 			while (!isInterrupted()/* && finishedReduceTasks.size() < getNumberOfInputs()+1*/) {
 				try {
 					synchronized(maptask){
 						LOG.info("start reduce output fetcher thread!");
 						ReduceTaskCompletionEventsUpdate updates = 
-							trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
+								trackerUmbilical.getLocalReduceCompletionEvents(getJobID(), iteration);
 
 						if(updates != null){
 							//now, we only consider the one-to-one mapping
@@ -118,8 +120,6 @@ class MapTask extends Task {
 							}
 						}
 					}
-					
-
 				}
 				catch (IOException e) {
 					e.printStackTrace();
@@ -128,6 +128,42 @@ class MapTask extends Task {
 				try {
 					Thread.sleep(1000);
 				} catch (InterruptedException e) { return; }
+			}
+		}
+		
+		private void run_one2all(){
+			int iteration = 1;
+			while (!isInterrupted()/* && finishedReduceTasks.size() < getNumberOfInputs()+1*/) {
+				try {
+					synchronized(maptask){
+						LOG.info("start reduce output fetcher thread!");
+						MapReduceOutputReadyEvent outputreadyevent = trackerUmbilical.getMapReduceOutputReadyEvent(getJobID(), iteration);
+
+						if(outputreadyevent != null){
+							LOG.info("iteration " + iteration + " outputreadyevent is not null!");
+							if(outputreadyevent.isGlobalDataReady()){
+								LOG.info("iteration " + iteration + " global data is ready!");
+								maptask.notifyAll();
+								iteration++;
+							}
+						}
+					}
+				}
+				catch (IOException e) {
+					e.printStackTrace();
+				}
+
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) { return; }
+			}
+		}
+		
+		public void run() {
+			if(type == Projector.Type.ONE2ONE){
+				run_one2one();
+			}else if(type == Projector.Type.ONE2ALL){
+				run_one2all();
 			}
 		}
 	}
@@ -537,8 +573,10 @@ class MapTask extends Task {
     } else {
     	long starttime = System.currentTimeMillis();
     	if(job.isIterative()){
+    		Projector projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
+    		
     		//normal iterative job, separate state data and static data
-    		ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, this);
+    		ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, this, projector.getProjectType());
     		rof.setDaemon(true);
     		rof.start();
     		
@@ -572,7 +610,9 @@ class MapTask extends Task {
     	}else if(job.isIncrementalStart()){
     		runIncrementalMapper(job, splitMetaInfo, umbilical, reporter);
     	}else if(job.isIncrementalIterative()){
-    		ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, this);
+    		Projector projector = ReflectionUtils.newInstance(job.getProjectorClass(), job); 
+    		
+    		ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, this, projector.getProjectType());
     		rof.setDaemon(true);
     		rof.start();
     		
@@ -1550,9 +1590,9 @@ class MapTask extends Task {
 		}else{
 			//for the following iterations
 			if(job.getDynamicDataPath() != null){
-				remotePath = new Path(job.getDynamicDataPath() + "/iteartion-" + iteration + "/" + getOutputName(getTaskID().getTaskID().getId()));
+				remotePath = new Path(job.getDynamicDataPath() + "/iteration-" + iteration + "/" + getOutputName(getTaskID().getTaskID().getId()));
 			}else if(job.getGlobalUniqValuePath() != null){
-				remotePath = new Path(job.getGlobalUniqValuePath() + "/iteartion-" + iteration);
+				remotePath = new Path(job.getGlobalUniqValuePath() + "/iteration-" + iteration);
 			}
 		}
 		

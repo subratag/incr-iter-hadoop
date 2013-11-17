@@ -8,42 +8,53 @@ import org.apache.hadoop.io.Writable;
 
 public class MapReduceOutputReadyEvent implements Writable {
 
-	boolean mapReady;
-	boolean reduceReady;
+	boolean mapOutputReady;
+	boolean reduceOutputReady;
+	boolean globalDataReady;
 	
 	public MapReduceOutputReadyEvent(){ }
 	
 	public MapReduceOutputReadyEvent(boolean mapReady, boolean reduceReady){
-		this.mapReady = mapReady;
-		this.reduceReady = reduceReady;
+		this.mapOutputReady = mapReady;
+		this.reduceOutputReady = reduceReady;
 	}
 	
 	public boolean isMapOutputReady(){
-		return mapReady;
+		return mapOutputReady;
 	}
 	
 	public void setMapOutputReady(boolean ready){
-		mapReady = ready;
+		mapOutputReady = ready;
 	}
 	
 	public boolean isReduceOutputReady(){
-		return reduceReady;
+		return reduceOutputReady;
 	}
 	
 	public void setReduceOutputReady(boolean ready){
-		reduceReady = ready;
+		reduceOutputReady = ready;
+	}
+	
+	public boolean isGlobalDataReady(){
+		return globalDataReady;
+	}
+	
+	public void setGlobalDataReady(boolean ready){
+		globalDataReady = ready;
 	}
 	
 	@Override
 	public void write(DataOutput out) throws IOException {
-		out.writeBoolean(mapReady);
-		out.writeBoolean(reduceReady);
+		out.writeBoolean(mapOutputReady);
+		out.writeBoolean(reduceOutputReady);
+		out.writeBoolean(globalDataReady);
 	}
 
 	@Override
 	public void readFields(DataInput in) throws IOException {
-		this.mapReady = in.readBoolean();
-		this.reduceReady = in.readBoolean();
+		this.mapOutputReady = in.readBoolean();
+		this.reduceOutputReady = in.readBoolean();
+		this.globalDataReady = in.readBoolean();
 	}
 
 }

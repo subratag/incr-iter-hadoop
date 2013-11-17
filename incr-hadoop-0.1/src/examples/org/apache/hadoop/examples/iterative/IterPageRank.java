@@ -236,8 +236,9 @@ public class IterPageRank {
 		System.out.println(	"\t-p # of parittions\n" +
 							"\t-i snapshot interval\n" +
 							"\t-I # of iterations\n" +
-							"\t-n # of nodes +" +
-							"\t-D initial dynamic path");
+							"\t-D initial dynamic path\n" +
+							"\t-f input format\n" + 
+							"\t-s run preserve job");
 	}
 
 	public static int main(String[] args) throws Exception {
@@ -252,6 +253,7 @@ public class IterPageRank {
 		int max_iterations = Integer.MAX_VALUE;
 		String init_dynamic = "";
 		String data_format = "";
+		boolean preserve = true;
 		
 		List<String> other_args = new ArrayList<String>();
 		for(int i=0; i < args.length; ++i) {
@@ -266,6 +268,8 @@ public class IterPageRank {
 		        	  init_dynamic = args[++i];
 		          } else if ("-f".equals(args[i])) {
 		        	  data_format = args[++i];
+		          } else if ("-s".equals(args[i])) {
+		        	  preserve = Boolean.parseBoolean(args[++i]);
 		          } else {
 		    		  other_args.add(args[i]);
 		    	  }
@@ -303,6 +307,7 @@ public class IterPageRank {
 	    
 	    job1.setDataDistribution(true);
 	    job1.setIterativeAlgorithmID(iteration_id);
+	    
 	    if(data_format.equals("KeyValueTextInputFormat")){
 	    	job1.setInputFormat(KeyValueTextInputFormat.class);
 	    	job1.setMapperClass(DistributeDataMap.class);
@@ -343,10 +348,6 @@ public class IterPageRank {
 	    /**
 	     * start iterative application jobs
 	     */
-	    
-	    //int iteration = 1;
-	    boolean cont = true;
-	    
 	    long itertime = 0;
 	    
 	    //while(cont && iteration < max_iterations){
@@ -361,20 +362,22 @@ public class IterPageRank {
 	    //set for iterative process   
 	    job.setIterative(true);
 	    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-	    /*job.setIterationNum(iteration);					//iteration number
-	    		    job.setCheckPointInterval(interval);			//checkpoint interval
-	    if(iteration > 1){
-	    	job.setDynamicDataPath(output);				//init by file, if not set init by API
-	    }*/
+
+	    if(max_iterations == Integer.MAX_VALUE){
+	    	job.setDistanceThreshold(1);
+	    }else{
+	    	job.setMaxIterations(max_iterations);
+	    }
+	    
 	    if(init_dynamic == ""){
 	    	job.setInitWithFileOrApp(false);
 	    }else{
 	    	job.setInitWithFileOrApp(true);
 	    	job.setInitStatePath(init_dynamic);
 	    }
-	    
 	    job.setStaticDataPath(output + "/substatic");
 	    job.setDynamicDataPath(output + "/result");	
+	    
 	    job.setStaticInputFormat(SequenceFileInputFormat.class);
 	    job.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
     	job.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
@@ -383,12 +386,6 @@ public class IterPageRank {
 	    FileInputFormat.addInputPath(job, new Path(output + "/substatic"));
 	    FileOutputFormat.setOutputPath(job, new Path(output + "/result"));
 	    
-	    if(max_iterations == Integer.MAX_VALUE){
-	    	job.setDistanceThreshold(1);
-	    }else{
-	    	job.setMaxIterations(max_iterations);
-	    }
-
 	    job.setOutputKeyClass(LongWritable.class);
 	    job.setOutputValueClass(FloatWritable.class);
 	    
@@ -397,63 +394,59 @@ public class IterPageRank {
 	    job.setProjectorClass(PageRankProjector.class);
 	    
 	    job.setNumReduceTasks(partitions);			
-
-	    cont = JobClient.runIterativeJob(job);
+	    JobClient.runIterativeJob(job);
 
     	long iterend = System.currentTimeMillis();
     	itertime += (iterend - iterstart) / 1000;
     	Util.writeLog("iter.pagerank.log", "iteration computation takes " + itertime + " s");
 	    	
-	    	//iteration++;
-	    //}
-	    
-	    
-	    //preserving job
-    	long preservestart = System.currentTimeMillis();
     	
-	    JobConf job2 = new JobConf(IterPageRank.class);
-	    jobname = "PageRank Preserve ";
-	    job2.setJobName(jobname);
-    
-	    if(partitions == 0) partitions = Util.getTTNum(job2);
+	    if(preserve){
+		    //preserving job
+	    	long preservestart = System.currentTimeMillis();
+	    	
+		    JobConf job2 = new JobConf(IterPageRank.class);
+		    jobname = "PageRank Preserve ";
+		    job2.setJobName(jobname);
 	    
-	    //set for iterative process   
-	    job2.setPreserve(true);
-	    job2.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
-	    //job2.setIterationNum(iteration);					//iteration numbe
-	    job2.setCheckPointInterval(interval);					//checkpoint interval
-	    job2.setStaticDataPath(output + "/substatic");
-	    job2.setDynamicDataPath(output + "/result/iteration-" + max_iterations);	
-	    job2.setStaticInputFormat(SequenceFileInputFormat.class);
-	    job2.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
-    	job2.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
-	    job2.setOutputFormat(SequenceFileOutputFormat.class);
-	    job2.setPreserveStatePath(output + "/preserve");
-	    
-	    FileInputFormat.addInputPath(job2, new Path(output + "/substatic"));
-	    FileOutputFormat.setOutputPath(job2, new Path(output + "/preserve/convergeState"));
-	    
-	    if(max_iterations == Integer.MAX_VALUE){
-	    	job2.setDistanceThreshold(1);
+		    if(partitions == 0) partitions = Util.getTTNum(job2);
+		    
+		    //set for iterative process   
+		    job2.setPreserve(true);
+		    job2.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
+		    //job2.setIterationNum(iteration);					//iteration numbe
+		    job2.setCheckPointInterval(interval);					//checkpoint interval
+		    job2.setStaticDataPath(output + "/substatic");
+		    job2.setDynamicDataPath(output + "/result/iteration-" + max_iterations);	
+		    job2.setStaticInputFormat(SequenceFileInputFormat.class);
+		    job2.setDynamicInputFormat(SequenceFileInputFormat.class);		//MUST have this for the following jobs, even though the first job not need it
+	    	job2.setResultInputFormat(SequenceFileInputFormat.class);		//if set termination check, you have to set this
+		    job2.setOutputFormat(SequenceFileOutputFormat.class);
+		    job2.setPreserveStatePath(output + "/preserve");
+		    
+		    FileInputFormat.addInputPath(job2, new Path(output + "/substatic"));
+		    FileOutputFormat.setOutputPath(job2, new Path(output + "/preserve/convergeState"));
+		    
+		    if(max_iterations == Integer.MAX_VALUE){
+		    	job2.setDistanceThreshold(1);
+		    }
+
+		    job2.setStaticKeyClass(LongWritable.class);
+		    job2.setOutputKeyClass(LongWritable.class);
+		    job2.setOutputValueClass(FloatWritable.class);
+		    
+		    job2.setIterativeMapperClass(PageRankMap.class);	
+		    job2.setIterativeReducerClass(PageRankReduce.class);
+		    job2.setProjectorClass(PageRankProjector.class);
+		    
+		    job2.setNumReduceTasks(partitions);			
+
+		    JobClient.runIterativeJob(job2);
+
+	    	long preserveend = System.currentTimeMillis();
+	    	long preservationtime = (preserveend - preservestart) / 1000;
+	    	Util.writeLog("iter.pagerank.log", "iteration preservation takes " + preservationtime + " s");
 	    }
-
-	    job2.setStaticKeyClass(LongWritable.class);
-	    job2.setOutputKeyClass(LongWritable.class);
-	    job2.setOutputValueClass(FloatWritable.class);
-	    
-	    job2.setIterativeMapperClass(PageRankMap.class);	
-	    job2.setIterativeReducerClass(PageRankReduce.class);
-	    job2.setProjectorClass(PageRankProjector.class);
-	    
-	    job2.setNumReduceTasks(partitions);			
-
-	    JobClient.runIterativeJob(job2);
-
-    	long preserveend = System.currentTimeMillis();
-    	long preservationtime = (preserveend - preservestart) / 1000;
-    	Util.writeLog("iter.pagerank.log", "iteration preservation takes " + preservationtime + " s");
-	    
-	    
 		return 0;
 	}
 
