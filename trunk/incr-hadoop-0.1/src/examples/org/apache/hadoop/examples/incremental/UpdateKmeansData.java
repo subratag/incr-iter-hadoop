@@ -259,7 +259,7 @@ public class UpdateKmeansData {
 	    FileInputFormat.addInputPath(job0, new Path(input));
 	    FileOutputFormat.setOutputPath(job0, new Path(update_output));
 	
-	    job0.setMapperClass(IdentityMapper.class);
+	    job0.setMapperClass(UpdateDataMap.class);
 	    job0.setReducerClass(UpdateDataReduce.class);
 	
 	    job0.setMapOutputKeyClass(IntWritable.class);
