@@ -1781,7 +1781,6 @@ class ReduceTask extends Task {
 				  source1 = skeyDeserializer1.deserialize(source1);
 				  
 				  if(key1.equals(iK)){
-					  
 					  //LOG.info("peek is " + updatedRecs.peek() + " source1 " + source1);
 					  
 					  if(updatedRecs.size() != 0 && updatedRecs.peek().source.equals(source1)){
@@ -1845,6 +1844,8 @@ class ReduceTask extends Task {
 		
 		private KEY iKey;
 		private IKValues valueBuffer;
+		
+		private long totaltime;
 	    
 	    public ValuesInMemIterator (RawKeyValueSourceIterator in, 
 	    						int iteration,
@@ -1933,11 +1934,14 @@ class ReduceTask extends Task {
 		    valueBuffer = null;
 		    		
 		    int trial = 0;
+		    long time1 = System.currentTimeMillis();
 		    while(valueBuffer == null && wrapPreserveFile.seek(deltaRecs.peek().key, trial, keyHashBuffer)){
 		    	trial++;
 		    	//if the returned record's key is not the delta key (might be hash conflict), then try again in the while loop
 		    	valueBuffer = wrapPreserveFile.getIKValues(deltaRecs);
 		    }
+		    long time2 = System.currentTimeMillis();
+		    totaltime += time2-time1;
 		      
 		    ++ctr;
 	    }
@@ -1966,6 +1970,8 @@ class ReduceTask extends Task {
 		    }else if(job.isIncrementalIterative()){
 		    	//hdfs.copyFromLocalFile(newPreservePath, new Path(job.getPreserveStatePath() + "/reducePreserve-Incr-" + taskid + "-" + job.getIterationNum()));
 		    }
+		    
+		    LOG.info("total getIKValues time is " + totaltime);
 	    }
   	}
   
@@ -3548,7 +3554,6 @@ class ReduceTask extends Task {
 		throw new IOException("acturally, there is no preserve data on the path you" +
 				" have set! Please check the path and check the map task number " + remotePreservedPath);
 	}
-	
 	
 	int nonConvergedItems = 0;
     // apply reduce function
