@@ -354,7 +354,7 @@ public class IterPageRank {
     	long iterstart = System.currentTimeMillis();
     	
 	    JobConf job = new JobConf(IterPageRank.class);
-	    String jobname = "PageRank Main ";
+	    String jobname = "Iter PageRank ";
 	    job.setJobName(jobname);
     
 	    //if(partitions == 0) partitions = Util.getTTNum(job);
