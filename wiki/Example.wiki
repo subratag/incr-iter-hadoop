@@ -11,4 +11,4 @@ We show four algorithm implementation examples, including APriori, PageRank, Kme
 
 [Kmeans Kmeans]
 
-[GIM-V GIM-V]
+[GIMV GIMV]
