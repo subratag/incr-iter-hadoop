@@ -1,4 +1,4 @@
-#algorithm implementation examples.
+#summary algorithm implementation examples.
 
 = Introduction =
 
