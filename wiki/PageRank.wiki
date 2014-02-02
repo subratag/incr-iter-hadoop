@@ -1,4 +1,4 @@
-#PageRank example
+#summary PageRank example
 
 = Introduction =
 
