@@ -1,4 +1,4 @@
-#APriori algorithm
+#summary APriori algorithm
 
 = Introduction =
 
