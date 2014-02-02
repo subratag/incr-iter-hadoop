@@ -6,12 +6,12 @@ Generalized Iterated Matrix-Vector multiplication (GIM-V)  is an abstraction of 
 
 = Details =
 
- * [WikiSyntax#Iterative GIM-V implementation]
+ * [Iterative GIM-V implementation#Iterative GIM-V implementation]
 
- * [WikiSyntax#Incremental GIM-V implementation]
+ * [Incremental GIM-V implementation#Incremental GIM-V implementation]
 
 
-==== Iterative GIM-V implementation ====
+=== Iterative GIM-V implementation ===
 
 
 {{{
@@ -614,7 +614,7 @@ public class IterGIMV {
 
 }}}
 
-==== Incremental GIM-V implementation ====
+=== Incremental GIM-V implementation ===
 
 {{{
 package org.apache.hadoop.examples.incremental;
