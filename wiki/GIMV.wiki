@@ -6,7 +6,7 @@ Generalized Iterated Matrix-Vector multiplication (GIM-V)  is an abstraction of 
 
 = Details =
 
- * [Iterative GIM-V implementation#Iterative_GIM-V_implementation]
+ * [Iterative_GIM-V_implementation#Iterative GIM-V implementation]
 
  * [Incremental GIM-V implementation#Incremental_GIM-V_implementation]
 
