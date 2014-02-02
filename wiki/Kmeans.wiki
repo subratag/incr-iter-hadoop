@@ -6,6 +6,10 @@ Kmeans is a commonly used clustering algorithm. We describe the algorithm briefl
 
 
 = Details =
+
+
+===Iterative Kmeans===
+
 {{{
 package org.apache.hadoop.examples.iterative;
 
