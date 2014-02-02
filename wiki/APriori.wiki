@@ -9,6 +9,8 @@ The algorithm consists of two passes of the data. That is, we need two MapReduce
 
 = Details =
 
+
+===Incremental APriori===
 {{{
 package org.apache.hadoop.examples.incremental;
 
