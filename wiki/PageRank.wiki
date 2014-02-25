@@ -63,36 +63,6 @@ public class IterPageRank {
 		
 			arg2.collect(new LongWritable(page), value);
 		}
-		
-		/*
-		private LongWritable outputKey = new LongWritable();
-		private Text outputVal = new Text();
-		private List<String> tokenList = new ArrayList<String>();
-
-		public void map(LongWritable key, Text value,
-				OutputCollector<LongWritable, Text> output, Reporter reporter)
-				throws IOException {
-			tokenList.clear();
-
-			String line = value.toString();
-			StringTokenizer tokenizer = new StringTokenizer(line);
-
-			while (tokenizer.hasMoreTokens()) {
-				tokenList.add(tokenizer.nextToken());
-			}
-
-			if (tokenList.size() >= 2) {
-				outputKey.set(Long.parseLong(tokenList.get(0)));
-				outputVal.set(tokenList.get(1).getBytes());
-				output.collect(outputKey, outputVal);
-			} else if(tokenList.size() == 1){
-				//no out link
-				outputKey.set(Long.parseLong(tokenList.get(0)));
-				output.collect(outputKey, new Text(tokenList.get(0)));
-			}
-			//System.out.println("output " + outputKey + "\t" + outputVal);
-		}
-		*/
 	}
 	
 	public static class DistributeDataReduce extends MapReduceBase implements
@@ -106,24 +76,11 @@ public class IterPageRank {
 
 			while(values.hasNext()){
 				String end = values.next().toString();
-				/*
-				if(key.get() == Long.parseLong(end)){
-					int randlong = rand.nextInt(Integer.MAX_VALUE);
-					while(randlong == Long.parseLong(end)){
-						randlong = rand.nextInt(Integer.MAX_VALUE);
-					}
-					outputv += randlong + " ";
-				}else{
-					outputv += end + " ";
-				}
-				*/
 				
 				outputv += end + " ";
-				//outputv += ends + " ";
 			}
 			
 			output.collect(key, new Text(outputv));
-			//System.out.println("output " + key + "\t" + outputv);
 		}
 	}
 	
@@ -214,7 +171,6 @@ public class IterPageRank {
 				Reporter reporter) throws IOException {
 			
 			float rank = dynamicvalue.get();
-			//System.out.println("input : " + dynamickey + " : " + rank);
 			String linkstring = staticval.toString();
 			
 			//in order to avoid non-inlink node, which will mismatch the static file
@@ -226,13 +182,11 @@ public class IterPageRank {
 			for(String link : links){
 				if(link.equals("")) continue;
 				output.collect(new LongWritable(Long.parseLong(link)), new FloatWritable(delta));
-				//System.out.println("output: " + link + "\t" + delta);
 			}
 		}
 
 		@Override
 		public FloatWritable removeLable() {
-			// TODO Auto-generated method stub
 			return null;
 		}
 	}
@@ -258,12 +212,9 @@ public class IterPageRank {
 				float v = values.next().get();
 				if(v == -1) continue;
 				rank += v;
-				
-				//System.out.println("reduce on " + key + " with " + v);
 			}
 			
 			output.collect(key, new FloatWritable(rank));
-			//System.out.println("output:" + key + "\t" + rank);
 		}
 		
 		@Override
@@ -286,13 +237,6 @@ public class IterPageRank {
 	}
 	
 	public static class PageRankProjector implements Projector<LongWritable, LongWritable, FloatWritable> {
-
-		@Override
-		public void configure(JobConf job) {
-			// TODO Auto-generated method stub
-			
-		}
-
 		@Override
 		public LongWritable project(LongWritable statickey) {
 			return statickey;
@@ -305,7 +249,6 @@ public class IterPageRank {
 
 		@Override
 		public Partitioner<LongWritable, FloatWritable> getDynamicKeyPartitioner() {
-			// TODO Auto-generated method stub
 			return new HashPartitioner<LongWritable, FloatWritable>();
 		}
 
@@ -413,7 +356,6 @@ public class IterPageRank {
 	    job1.setOutputKeyClass(LongWritable.class);
 	    job1.setOutputValueClass(Text.class);
 	    
-	    //new added, the order is strict
 	    job1.setProjectorClass(PageRankProjector.class);
 	    
 	    /**
@@ -440,9 +382,7 @@ public class IterPageRank {
 	    JobConf job = new JobConf(IterPageRank.class);
 	    String jobname = "Iter PageRank ";
 	    job.setJobName(jobname);
-    
-	    //if(partitions == 0) partitions = Util.getTTNum(job);
-	    
+
 	    //set for iterative process   
 	    job.setIterative(true);
 	    job.setIterativeAlgorithmID(iteration_id);		//must be unique for an iterative algorithm
